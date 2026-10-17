@@ -1,11 +1,11 @@
-Исправлен клик по **`…` внутри свёрнутого JSON-блока**: блок раскрывается с первого раза, каретка остаётся на месте, текст не меняется. Кнопка **+** не появляется поверх свёрнутого заголовка. Раскрытие работает также через Enter и пробел.
+При наведении на стрелку **Fold / Unfold** редактор подсвечивает соответствующий JSON-блок до закрывающей скобки. У свёрнутого блока подсвечивается его строка. Наведение на **…** работает так же.
 
-Убрана надпись **Empty template · v2rayN defaults**. Пустые шаблоны продолжают использовать настройки v2rayN по умолчанию.
+Подсветка исчезает при уходе курсора, не перемещает каретку и не меняет JSON.
 
-**Обновление:** замените `V2Lens.exe` рядом с `v2rayN.exe`, сохранив папку `V2Lens-data`. Windows 10/11 x64, WebView2 Runtime. Python и Node.js для готового EXE не нужны.
+**Обновление:** замените `V2Lens.exe` рядом с `v2rayN.exe`, сохранив `V2Lens-data`. Windows 10/11 x64, WebView2 Runtime. Python и Node.js для готового EXE не нужны.
 
 ---
 
-Fixed folded JSON placeholders: clicking **…** expands the block on the first click without moving the editing caret or changing the document. The **+** button stays hidden on folded headers. Keyboard expansion is supported. Removed the empty-template status message.
+Hovering a **Fold / Unfold** arrow highlights its JSON block. Collapsed blocks highlight their visible line; hovering **…** works too. The highlight clears when the pointer leaves, without moving the caret or modifying the document.
 
 Replace `V2Lens.exe` beside `v2rayN.exe` and keep `V2Lens-data`.

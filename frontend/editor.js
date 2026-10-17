@@ -1,7 +1,7 @@
-import {Compartment,EditorState,Transaction} from '@codemirror/state';
+import {Compartment,EditorState,StateEffect,StateField,Transaction} from '@codemirror/state';
 import {Decoration,EditorView,ViewPlugin,WidgetType,drawSelection,highlightActiveLine,highlightActiveLineGutter,keymap,lineNumbers} from '@codemirror/view';
 import {defaultKeymap,history,historyKeymap,indentWithTab} from '@codemirror/commands';
-import {HighlightStyle,bracketMatching,codeFolding,foldEffect,foldGutter,foldInside,foldKeymap,foldedRanges,indentOnInput,indentUnit,syntaxHighlighting,unfoldAll,unfoldEffect} from '@codemirror/language';
+import {HighlightStyle,bracketMatching,codeFolding,foldEffect,foldGutter,foldInside,foldKeymap,foldable,foldedRanges,indentOnInput,indentUnit,syntaxHighlighting,unfoldAll,unfoldEffect} from '@codemirror/language';
 import {json,jsonParseLinter} from '@codemirror/lang-json';
 import {linter} from '@codemirror/lint';
 import {searchKeymap} from '@codemirror/search';
@@ -31,6 +31,32 @@ const colors=HighlightStyle.define([
   {tag:tags.punctuation,color:'#929ba8'},
   {tag:tags.invalid,color:'#e5a2a0'}
 ]);
+const hoverFold=StateEffect.define();
+const foldHover=StateField.define({
+  create:()=>Decoration.none,
+  update(decorations,transaction){
+    if(transaction.docChanged)decorations=Decoration.none;
+    for(const effect of transaction.effects)if(effect.is(hoverFold)) {
+      const lines=[];
+      if(effect.value) {
+        const {doc}=transaction.state,end=doc.lineAt(effect.value.to).number;
+        for(let number=doc.lineAt(effect.value.from).number;number<=end;number++)
+          lines.push(Decoration.line({class:'cm-foldHover'}).range(doc.line(number).from));
+      }
+      decorations=Decoration.set(lines);
+    }
+    return decorations;
+  },
+  provide:field=>EditorView.decorations.from(field)
+});
+function highlightFold(view,line) {
+  let range=null;
+  foldedRanges(view.state).between(line.from,line.to,(from,to)=>{if(!range)range={from,to};});
+  view.dispatch({effects:hoverFold.of(range||foldable(view.state,line.from,line.to)||null)});
+}
+function clearFoldHighlight(view) {
+  if(view.state.field(foldHover).size)view.dispatch({effects:hoverFold.of(null)});
+}
 const theme=EditorView.theme({
   '&':{height:'100%',color:'#c2c9d4',backgroundColor:'#15181b',fontSize:'12px'},
   '&.cm-focused':{outline:'none'},
@@ -41,7 +67,10 @@ const theme=EditorView.theme({
   '.cm-lineNumbers .cm-gutterElement':{minWidth:'29px',paddingRight:'6px'},
   '.cm-activeLineGutter':{backgroundColor:'transparent',color:'#aab2c0'},
   '.cm-activeLine':{backgroundColor:'#ffffff03'},
+  '.cm-foldHover':{backgroundColor:'#b2aafa12',boxShadow:'inset 2px 0 #a89abd55'},
+  '.cm-foldHover .cm-foldPlaceholder':{backgroundColor:'#3b344b',color:'#e0d5f5'},
   '.cm-foldGutter .cm-gutterElement':{cursor:'pointer',color:'#858391',padding:'0 3px'},
+  '.cm-foldGutter .cm-gutterElement:hover':{color:'#d5c8eb'},
   '.cm-addValue':{display:'inline-block',width:'18px',height:'18px',marginLeft:'8px',padding:'0',border:'0',borderRadius:'4px',background:'transparent',color:'#858391',font:'15px/18px "Segoe UI",sans-serif',verticalAlign:'middle',cursor:'pointer'},
   '.cm-addValue:hover,.cm-addValue:focus-visible':{background:'#b2aafa19',color:'#ded7ee'},
   '.cm-foldPlaceholder':{backgroundColor:'#252831',border:'none',borderRadius:'4px',color:'#a89abd',padding:'0 5px',cursor:'pointer'},
@@ -124,20 +153,29 @@ export function create(parent,{onChange,onSave,onError,onFoldsChange=()=>{}}) {
     }
   },{decorations:plugin=>plugin.decorations});
   const extensions=()=>[
-    lineNumbers(),foldGutter(),codeFolding({placeholderDOM:(view,onUnfold)=>{
+    lineNumbers(),foldHover,foldGutter({domEventHandlers:{
+      mouseover:(view,line)=>{highlightFold(view,line);return false;},
+      mouseout:(view,line,event)=>{
+        if(!event.target.closest('.cm-gutterElement')?.contains(event.relatedTarget))clearFoldHighlight(view);
+        return false;
+      }
+    }}),codeFolding({placeholderDOM:(view,onUnfold)=>{
       const placeholder=document.createElement('span');
       placeholder.className='cm-foldPlaceholder';placeholder.textContent='…';placeholder.contentEditable='false';
       placeholder.setAttribute('role','button');placeholder.setAttribute('aria-label','Expand folded block');placeholder.tabIndex=0;placeholder.title='Expand block';
       // Keep native selection changes from moving the inline + before click fires.
       placeholder.onmousedown=event=>{event.preventDefault();event.stopPropagation();};
-      placeholder.onclick=event=>{event.stopPropagation();onUnfold(event);};
-      placeholder.onkeydown=event=>{if(event.key==='Enter' || event.key===' '){event.stopPropagation();onUnfold(event);}};
+      placeholder.onmouseenter=()=>highlightFold(view,view.state.doc.lineAt(view.posAtDOM(placeholder)));
+      placeholder.onmouseleave=()=>clearFoldHighlight(view);
+      placeholder.onclick=event=>{event.stopPropagation();clearFoldHighlight(view);onUnfold(event);};
+      placeholder.onkeydown=event=>{if(event.key==='Enter' || event.key===' '){event.stopPropagation();clearFoldHighlight(view);onUnfold(event);}};
       return placeholder;
     }}),addButton,highlightActiveLineGutter(),history(),drawSelection(),
     json(),syntaxHighlighting(colors),indentOnInput(),indentUnit.of('  '),bracketMatching(),
     closeBrackets(),highlightActiveLine(),linter(jsonParseLinter(),{delay:350}),theme,
     mode.of([EditorState.readOnly.of(readOnly),EditorView.editable.of(!readOnly)]),
     EditorView.contentAttributes.of({'aria-label':'Full Xray template JSON','spellcheck':'false'}),
+    EditorView.domEventHandlers({mouseleave:()=>{clearFoldHighlight(view);return false;}}),
     keymap.of([
       {key:'Mod-s',preventDefault:true,run:()=>{onSave();return true;}},
       {key:'Mod-Shift-f',preventDefault:true,run:format},
