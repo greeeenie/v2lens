@@ -511,7 +511,8 @@ function render(activityUpdate=false,preserveOrder=false) {
     const isVisible=after.bottom>bounds.top && after.top<bounds.bottom;
     const promoted=before!==undefined && before>after.top+.5 && el._newActivity;
     if(before!==undefined && isVisible && Math.abs(before-after.top)>.5) {
-      el.animate([{transform:`translateY(${before-after.top}px)`},{transform:'translateY(0)'}],{duration:150,easing:'cubic-bezier(.2,0,.2,1)'});
+      const start=before>=bounds.bottom?bounds.bottom-after.height:before;
+      el.animate([{transform:`translateY(${start-after.top}px)`},{transform:'translateY(0)'}],{duration:150,easing:'cubic-bezier(.2,0,.2,1)'});
     } else if(activityUpdate===true && group.depth===0 && isVisible && isNew) {
       el.animate([{transform:'translateY(-7px)',opacity:.25},{transform:'translateY(0)',opacity:1}],{duration:150,easing:'ease-out'});
     }

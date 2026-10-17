@@ -79,6 +79,21 @@ try {
   assert.ok(interrupted.every(count=>count<=1),'A new update replaces the previous movement instead of stacking animations');
   await motion.waitForTimeout(200);
   assert.equal(await motion.locator('.row').evaluateAll(rows=>rows.flatMap(row=>row.getAnimations()).length),0,'Movement finishes cleanly');
+  const distant=await motion.evaluate(input=>{
+    records=Array.from({length:50},(_,i)=>({...input[0],app:`App${i}.exe`,pid:100+i,time:50-i}));
+    render();
+    for(const row of document.querySelectorAll('.row'))for(const animation of row.getAnimations())animation.finish();
+    const row=[...document.querySelectorAll('.row')].at(-1);
+    const original=row.getBoundingClientRect().top,bottom=document.querySelector('.rows').getBoundingClientRect().bottom;
+    records[49].time=100;render(true);
+    const animation=row.getAnimations()[0],frame=animation.effect.getKeyframes()[0];
+    animation.cancel();
+    const rect=row.getBoundingClientRect();
+    return {original,bottom,start:rect.top+Number(frame.transform.match(/translateY\(([-.\d]+)px\)/)[1]),height:rect.height,duration:animation.effect.getTiming().duration};
+  },context.input);
+  assert.ok(distant.original>distant.bottom+1000,'Test promotes a row from far below the visible table');
+  assert.ok(Math.abs(distant.start-(distant.bottom-distant.height))<1,'Offscreen row starts at the last visible row instead of its distant position');
+  assert.equal(distant.duration,150,'Clamping the starting position preserves the fast duration');
   await motion.close();
 } finally {await browser.close();}
 console.log('PASS: flat application details, visible PIDs, separate/sortable gateways and traffic deduplication');
