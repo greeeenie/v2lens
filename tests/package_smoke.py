@@ -27,6 +27,6 @@ with tempfile.TemporaryDirectory(prefix='V2Lens portable smoke ') as directory:
     report=fixture/'report.json'
     subprocess.run([str(executable),'--v2ray-dir',str(fixture),'--diagnose',str(report)],check=True,timeout=30)
     result=json.loads(report.read_text())
-    assert Path(result['client'])==fixture
+    assert Path(result['client']).resolve()==fixture.resolve()
     assert result['panel'] and result['editor'] and result['traffic_helper']
 print('PASS: portable resources, isolated client discovery, archive contents and SHA-256')

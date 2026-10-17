@@ -2,8 +2,9 @@
 from pathlib import Path
 from PIL import Image, ImageDraw
 
-ROOT = Path(__file__).resolve().parent/'assets'
-ROOT.mkdir(exist_ok=True)
+ROOT = Path(__file__).resolve().parents[1]/'docs/brand'
+ROOT.mkdir(parents=True,exist_ok=True)
+ICON = Path(__file__).resolve().parents[1]/'src/v2lens/resources/v2lens.ico'
 svg = '''<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
 <rect width="256" height="256" rx="54" fill="#111315"/>
 <rect x="5" y="5" width="246" height="246" rx="49" fill="none" stroke="#34313f" stroke-width="2"/>
@@ -28,4 +29,4 @@ line([(153,153),(209,209)],'#b2aafa',18)
 line([(80,90),(108,128),(136,90)],'#e8e9ec',16)
 image=image.resize((256,256),Image.Resampling.LANCZOS)
 image.save(ROOT/'v2lens.png')
-image.save(ROOT/'v2lens.ico',sizes=[(n,n) for n in [16,20,24,32,48,64,128,256]])
+image.save(ICON,sizes=[(n,n) for n in [16,20,24,32,48,64,128,256]])

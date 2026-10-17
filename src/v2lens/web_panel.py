@@ -6,10 +6,10 @@ import subprocess
 from pathlib import Path
 import threading
 import webview
-from traffic import TrafficMonitor
-from template_editor import TemplateConflict, TemplateStore
-from app_paths import ASSETS
-from client_reload import reload_client
+from .traffic import TrafficMonitor
+from .template_editor import TemplateConflict, TemplateStore
+from .app_paths import ASSETS
+from .client_reload import reload_client
 
 
 class Bridge:
@@ -96,7 +96,7 @@ class Bridge:
             defaults['hide_unknown'] = value.get('hide_unknown') is True
             defaults['group_by_app'] = value.get('group_by_app') is True
             defaults['auto_reload'] = value.get('auto_reload') is True
-            if value.get('sort_field') in ('app', 'protocol', 'route', 'time', 'traffic'):
+            if value.get('sort_field') in ('app', 'protocol', 'gateway', 'route', 'time', 'traffic'):
                 defaults['sort_field'] = value['sort_field']
             if value.get('sort_direction') in ('asc', 'desc'):
                 defaults['sort_direction'] = value['sort_direction']
@@ -123,7 +123,7 @@ class Bridge:
         return True
 
     def set_sort(self, field, direction):
-        if field not in ('app', 'protocol', 'route', 'time', 'traffic') or direction not in ('asc', 'desc'):
+        if field not in ('app', 'protocol', 'gateway', 'route', 'time', 'traffic') or direction not in ('asc', 'desc'):
             raise ValueError('Invalid sort order')
         self._update_preferences(sort_field=field, sort_direction=direction)
         return True
@@ -183,6 +183,6 @@ def run(collector, state, smoke_test=None):
                 bridge.close()
         bridge._window.events.loaded += verify_window
     try:
-        webview.start(gui='edgechromium', debug=False, private_mode=True, icon=str(ASSETS/'assets/v2lens.ico'))
+        webview.start(gui='edgechromium', debug=False, private_mode=True, icon=str(ASSETS/'v2lens.ico'))
     finally:
         collector.stop.set()

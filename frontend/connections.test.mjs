@@ -1,0 +1,53 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+import {fileURLToPath} from 'node:url';
+import {chromium} from 'playwright-core';
+
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const assets=path.join(root,'src/v2lens/resources');
+const html=fs.readFileSync(path.join(assets,'panel.html'),'utf8');
+const script=html.match(/<script>([\s\S]*?)<\/script>/)[1];
+const stub={addEventListener(){},checked:false};
+const context=vm.createContext({performance:{now:()=>1000},document:{getElementById:()=>stub,querySelectorAll:()=>[],addEventListener(){}},window:{addEventListener(){}}});
+vm.runInContext(script,context);
+const record=(pid,inbound,down=100)=>({app:'Demo.exe',pid,inbound,protocol:'TCP',outbound:'proxy',destination:'example.com',port:443,
+  source:'172.18.0.1',local_port:50000+pid,time:Date.now()/1000,traffic:{sent:10,received:100,up_rate:10,down_rate:down}});
+context.input=[record(1,'tun'),record(2,'tun'),record(1,'socks',200)];
+const run=code=>vm.runInContext(code,context);
+assert.equal(run("buildGroups(input,'','all',false,false).length"),3,'Different gateways do not merge');
+run("app=buildGroups(input,'','all',false,true)[0]");
+assert.equal(run('app.record.traffic.down_rate'),400,'Each gateway contributes traffic once');
+assert.equal(run('app.record.summary.inbounds.join(",")'),'socks,tun');
+assert.equal(run('flattenGroups([app]).length'),1);
+run('expandedApps.add(app.key)');
+assert.equal(run('flattenGroups([app]).length'),4,'App expands straight into three connections');
+assert.equal(run('flattenGroups([app]).filter(g=>g.depth===1).length'),3);
+assert.equal(run('flattenGroups([app]).filter(g=>g.depth>1 || g.depth===1 && g.members).length'),0,'No intermediate PID groups');
+assert.equal(run('flattenGroups([app]).filter(g=>g.depth===1).map(g=>g.record.pid).join(",")'),'1,1,2');
+assert.equal(run("buildGroups(input,'','all',false,false).sort((a,b)=>compareGroups(a,b,'gateway','asc'))[0].record.inbound"),'socks');
+assert.equal(run("buildGroups(input,'','all',false,false).sort((a,b)=>compareGroups(a,b,'gateway','desc'))[0].record.inbound"),'tun');
+assert.equal(run("gatewayLabel('other-inbound')"),'other-inbound','Custom tags remain explicit');
+
+const browser=await chromium.launch({channel:'msedge',headless:true});
+try {
+  const page=await browser.newPage({viewport:{width:980,height:720},reducedMotion:'reduce'});
+  await page.setContent(html);
+  await page.evaluate(input=>{records=input;receivedSnapshot=true;document.getElementById('group-app').checked=true;render();},context.input);
+  await page.getByRole('button',{name:'Expand Demo.exe',exact:true}).click();
+  assert.equal(await page.locator('.row').count(),4);
+  assert.equal(await page.locator('.connection-row .expander:not([hidden])').count(),0);
+  assert.equal(await page.locator('.process-row').count(),0);
+  assert.deepEqual(await page.locator('.connection-row .gateway').allTextContents(),['SOCKS','TUN','TUN']);
+  assert.deepEqual(await page.locator('.connection-row .pid').allTextContents(),['1','1','2']);
+  assert.ok((await page.locator('.connection-row .app-name').allTextContents()).every(name=>name.startsWith('172.18.0.1:')));
+  assert.ok((await page.locator('.row').evaluateAll(rows=>rows.map(r=>r.children.length))).every(count=>count===7),'Headers and rows have seven columns');
+  await page.getByRole('button',{name:'Gateway',exact:true}).click();
+  assert.equal(await page.locator('[data-sort-cell="gateway"]').getAttribute('aria-sort'),'ascending');
+  await page.getByRole('button',{name:'Collapse Demo.exe',exact:true}).click();
+  assert.equal(await page.locator('.row').count(),1);
+  await page.setViewportSize({width:690,height:500});
+  assert.ok(await page.locator('.row').evaluate(row=>row.scrollWidth<=row.clientWidth+1),'Columns fit the minimum window width');
+} finally {await browser.close();}
+console.log('PASS: flat application details, visible PIDs, separate/sortable gateways and traffic deduplication');

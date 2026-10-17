@@ -5,7 +5,7 @@ import tempfile
 import threading
 import unittest
 
-from web_panel import Bridge
+from v2lens.web_panel import Bridge
 
 
 class EditorStateTests(unittest.TestCase):

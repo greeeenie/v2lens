@@ -35,8 +35,8 @@ assert.deepEqual(JSON.parse(insert(nested,nested.indexOf('"rules": [')+10)).rule
 assert.ok(insert(exact,exact.length).includes('900719925474099312345'),'Insertion preserves raw number precision');
 assert.deepEqual(jsonBlocks(nested).map(block=>block.path),[[],['rules'],['rules',0],['rules',0,'process']]);
 assert.throws(()=>valueInsertion('{broken}',1));
-const source=fs.readFileSync(path.join(root,'../panel.html'),'utf8');
-const bundle=fs.readFileSync(path.join(root,'../json-editor.js'),'utf8');
+const source=fs.readFileSync(path.join(root,'../src/v2lens/resources/panel.html'),'utf8');
+const bundle=fs.readFileSync(path.join(root,'../src/v2lens/resources/json-editor.js'),'utf8');
 const html=source.replace('<!-- JSON_EDITOR_BUNDLE -->',()=>'<script>'+bundle.replace(/<\/script/gi,'<\\/script')+'</script>');
 const browser=await chromium.launch({channel:'msedge',headless:true});
 try {

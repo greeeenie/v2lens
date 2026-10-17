@@ -66,7 +66,7 @@
   .recent[aria-pressed="true"] { color:var(--text); background:#23272f; border-color:#343944; }
   .recent svg { width:13px; height:13px; }
   .table { display:flex; flex:1; min-height:0; flex-direction:column; }
-  .columns,.row { display:grid; grid-template-columns:minmax(110px,1fr) 54px 58px minmax(130px,1.4fr) 108px 76px; gap:12px; align-items:center; }
+  .columns,.row { display:grid; grid-template-columns:minmax(110px,1fr) 54px 58px minmax(130px,1.4fr) 90px 70px 76px; gap:12px; align-items:center; }
   .columns { padding:0 12px 11px; color:var(--faint); font-size:11px; border-bottom:1px solid var(--edge); user-select:none; }
   .sort-heading { display:flex; align-items:center; gap:6px; padding:0; border:0; background:transparent; color:inherit; font-size:inherit; text-align:left; }
   .sort-heading:hover { color:#bfc6d2; }
@@ -76,8 +76,7 @@
   .row { min-height:44px; padding:7px 12px; border-bottom:1px solid #ffffff05; border-radius:7px; position:relative; background:var(--bg); }
   .row:hover { background:#ffffff03; }
   .row.expandable { cursor:pointer; }
-  .row.process-row,.row.connection-row { min-height:36px; }
-  .row.process-row { background:#15181c; }
+  .row.connection-row { min-height:36px; }
   .row.connection-row .app-name { font-size:10px; font-weight:400; color:var(--muted); }
   .expander { display:grid; place-items:center; flex-shrink:0; width:12px; height:18px; padding:0; border:0; background:none; color:var(--muted); }
   .expander[hidden] { display:none; }
@@ -90,6 +89,7 @@
   .app-info { display:flex; align-items:center; gap:8px; }
   .source { margin-top:1px; color:var(--faint); font:10px/11px "Cascadia Code",Consolas,monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .protocol { color:var(--muted); font-size:10px; letter-spacing:.3px; }
+  .gateway { color:var(--muted); font-size:10px; white-space:nowrap; }
   .pid { color:#aab1bd; font:11px "Cascadia Code",Consolas,monospace; font-variant-numeric:tabular-nums; }
   .unknown .app-name { color:var(--muted); font-weight:400; }
   .target { display:flex; align-items:center; gap:8px; min-width:0; }
@@ -111,7 +111,7 @@
   ::-webkit-scrollbar-track { background:transparent; }
   ::-webkit-scrollbar-thumb { background:#353b45; border-radius:8px; }
   ::-webkit-scrollbar-thumb:hover { background:#525b68; }
-  @media(max-width:760px) { main { padding-left:18px; padding-right:18px; } .tools { gap:8px; } .segments button { padding:0 8px; } .columns,.row { grid-template-columns:minmax(95px,1fr) 43px 49px minmax(100px,1.2fr) 87px 63px; gap:8px; } .recent { padding:0 5px; gap:5px; } .traffic { font-size:9px; } }
+  @media(max-width:760px) { main { padding-left:18px; padding-right:18px; } .tools { gap:8px; } .segments button { padding:0 8px; } .columns,.row { grid-template-columns:minmax(95px,1fr) 43px 49px minmax(100px,1.2fr) 70px 56px 63px; gap:8px; } .recent { padding:0 5px; gap:5px; } .traffic { font-size:9px; } }
   @media(prefers-reduced-motion:no-preference) { button,.search { transition:background .12s,border-color .12s; } }
 </style>
 </head>
@@ -144,6 +144,7 @@
         <span role="columnheader" data-sort-cell="protocol" aria-sort="none"><button class="sort-heading" data-sort="protocol" title="Sort by protocol">Protocol<span class="sort-arrow" aria-hidden="true"></span></button></span>
         <span role="columnheader">Destination</span>
         <span role="columnheader" data-sort-cell="traffic" aria-sort="none"><button class="sort-heading" data-sort="traffic" title="Sort by current download and upload speed">Traffic<span class="sort-arrow" aria-hidden="true"></span></button></span>
+        <span role="columnheader" data-sort-cell="gateway" aria-sort="none"><button class="sort-heading" data-sort="gateway" title="Sort by Xray inbound tag">Gateway<span class="sort-arrow" aria-hidden="true"></span></button></span>
         <span role="columnheader" data-sort-cell="route" aria-sort="none"><button class="sort-heading" data-sort="route" title="Sort by route">Route<span class="sort-arrow" aria-hidden="true"></span></button></span>
       </div>
       <div class="rows" id="rows" role="rowgroup"><div id="empty" class="empty" role="status">Waiting for new connections…</div></div>
@@ -162,7 +163,7 @@ let activeView='connections',templateLoaded=false,templateDirty=false,templateBu
 let templateEditor=null;
 let templateFoldPaths=null,templateStateWrite=Promise.resolve();
 const nodes=new Map();
-const expandedApps=new Set(),collapsedProcesses=new Set();
+const expandedApps=new Set();
 let rootOrder=[];
 const targetSeen=new Map(), newTargets=new Map();
 const collator=new Intl.Collator('en',{numeric:true,sensitivity:'base'});
@@ -256,8 +257,9 @@ function visibleRecord(r,q,selectedRoute,hideUnknown) {
   return !q || `${r.app} ${r.pid||''} ${r.protocol||''} ${r.inbound||''} ${r.destination} ${r.port} ${r.source||''} ${r.local_port||''}`.toLocaleLowerCase().includes(q);
 }
 function connectionKey(r) {
-  return JSON.stringify([r.app,r.pid,r.protocol,r.destination,r.port,r.outbound,...(knownProcess(r)?[]:[r.source,r.local_port])]);
+  return JSON.stringify([r.app,r.pid,r.protocol,r.destination,r.port,r.inbound||'',r.outbound,...(knownProcess(r)?[]:[r.source,r.local_port])]);
 }
+function gatewayLabel(tag) { return {tun:'TUN',socks:'SOCKS'}[tag?.toLowerCase()] || tag || '—'; }
 function formatBytes(value) {
   const units=['B','KB','MB','GB'];let unit=0;
   while(value>=1024 && unit<units.length-1){value/=1024;unit++;}
@@ -284,6 +286,7 @@ function compareGroups(a,b,field=sortField,direction=sortDirection) {
     primary=(x.traffic?x.traffic.up_rate+x.traffic.down_rate:0)-(y.traffic?y.traffic.up_rate+y.traffic.down_rate:0);
   }
   else if(field==='protocol')primary=collator.compare(x.protocol||'',y.protocol||'');
+  else if(field==='gateway')primary=collator.compare(gatewayLabel(x.inbound),gatewayLabel(y.inbound));
   else if(field==='route')primary=collator.compare(routeNames[x.outbound]||x.outbound,routeNames[y.outbound]||y.outbound);
   else {
     const identified=Number(!knownProcess(x))-Number(!knownProcess(y));
@@ -294,7 +297,7 @@ function compareGroups(a,b,field=sortField,direction=sortDirection) {
   // Stable tie-breakers keep activity updates from shuffling alphabetic groups.
   return collator.compare(processLabel(x),processLabel(y)) || (x.pid??Infinity)-(y.pid??Infinity) ||
     collator.compare(x.protocol||'',y.protocol||'') || collator.compare(x.outbound,y.outbound) ||
-    collator.compare(x.destination,y.destination) || x.port-y.port || collator.compare(a.key,b.key);
+    collator.compare(x.inbound||'',y.inbound||'') || collator.compare(x.destination,y.destination) || x.port-y.port || collator.compare(a.key,b.key);
 }
 function updateSortIndicators() {
   for(const cell of document.querySelectorAll('[data-sort-cell]')) {
@@ -316,14 +319,15 @@ function summarizeMembers(members) {
   const pids=[...new Set(members.map(g=>g.record.pid).filter(p=>Number.isInteger(p)&&p>0))].sort((a,b)=>a-b);
   const protocols=[...new Set(members.map(g=>g.record.protocol))].sort();
   const routes=[...new Set(members.map(g=>g.record.outbound))].sort();
+  const inbounds=[...new Set(members.map(g=>g.record.inbound||''))].sort();
   const destinations=[...new Set(members.map(g=>`${g.record.destination.includes(':')?'['+g.record.destination+']':g.record.destination}:${g.record.port}`))].sort(collator.compare);
   const measured=members.filter(g=>g.record.traffic);
   const traffic=measured.length?measured.reduce((sum,g)=>{
     for(const field of ['sent','received','up_rate','down_rate'])sum[field]+=g.record.traffic[field]||0;
     return sum;
   },{sent:0,received:0,up_rate:0,down_rate:0}):null;
-  return {...latest,pid:pids.length===1?pids[0]:null,protocol:protocols.join('/'),outbound:routes.length===1?routes[0]:'mixed',traffic,
-    summary:{pids,protocols,routes,destinations,measured:measured.length,connections:members.length}};
+  return {...latest,pid:pids.length===1?pids[0]:null,protocol:protocols.join('/'),inbound:inbounds.join('/'),outbound:routes.length===1?routes[0]:'mixed',traffic,
+    summary:{pids,protocols,routes,inbounds,destinations,measured:measured.length,connections:members.length}};
 }
 function buildGroups(input,q,selectedRoute,hideUnknown,byApplication) {
   const groups=new Map();
@@ -352,24 +356,13 @@ function flattenGroups(roots) {
   for(const root of roots) {
     shown.push({...root,depth:0});
     if(!root.members || !expandedApps.has(root.key))continue;
-    const processes=new Map();
-    for(const member of root.members) {
-      const pid=member.record.pid||0;
-      if(!processes.has(pid))processes.set(pid,[]);
-      processes.get(pid).push(member);
-    }
-    for(const [pid,members] of [...processes].sort((a,b)=>a[0]-b[0])) {
-      const key=root.key+':pid:'+pid;
-      shown.push({key,record:summarizeMembers(members),members,count:members.reduce((sum,g)=>sum+g.count,0),depth:1});
-      if(!collapsedProcesses.has(key))for(const member of [...members].sort((a,b)=>compareGroups(a,b,'app','asc')))
-        shown.push({...member,key:key+':connection:'+member.key,depth:2});
-    }
+    for(const member of [...root.members].sort((a,b)=>compareGroups(a,b)))
+      shown.push({...member,key:root.key+':connection:'+member.key,depth:1});
   }
   return shown;
 }
-function toggleGroup(key,depth) {
-  const set=depth===0?expandedApps:collapsedProcesses;
-  if(set.has(key))set.delete(key);else set.add(key);
+function toggleGroup(key) {
+  if(expandedApps.has(key))expandedApps.delete(key);else expandedApps.add(key);
   render(false,true);
 }
 function render(activityUpdate=false,preserveOrder=false) {
@@ -400,24 +393,24 @@ function render(activityUpdate=false,preserveOrder=false) {
       const target=node('div','target');
       target.append(node('span','destination'),node('span','count'));
       const badge=node('span','route'),pid=node('span','pid');
-      el.append(app,pid,node('span','protocol',r.protocol||'—'),target,node('span','traffic'),badge);nodes.set(group.key,el);
+      el.append(app,pid,node('span','protocol',r.protocol||'—'),target,node('span','traffic'),node('span','gateway'),badge);nodes.set(group.key,el);
       for(const cell of el.children)cell.setAttribute('role','cell');
-      el.addEventListener('click',()=>{if(el._toggleKey && !window.getSelection?.()?.toString())toggleGroup(el._toggleKey,el._depth);});
+      el.addEventListener('click',()=>{if(el._toggleKey && !window.getSelection?.()?.toString())toggleGroup(el._toggleKey);});
       if(!reducedMotion && activityUpdate===true && group.depth===0 && (newTargets.has(group.key) || group.members?.some(g=>newTargets.has(g.key)))) {
         entering.add(group.key);
       }
     }
-    el._depth=group.depth;el._toggleKey=group.members?group.key:null;
-    el.className='row'+(knownProcess(r)?'':' unknown')+(group.members?' expandable':'')+(group.depth===1?' process-row':group.depth===2?' connection-row':'');
+    el._toggleKey=group.members?group.key:null;
+    el.className='row'+(knownProcess(r)?'':' unknown')+(group.members?' expandable':'')+(group.depth===1?' connection-row':'');
     el.querySelector('.application').style.paddingLeft=(group.depth*14)+'px';
-    el.querySelector('.app-name').textContent=group.depth===1?(r.pid?'PID '+r.pid:'PID —'):group.depth===2?sourceAddress(r)||processLabel(r):processLabel(r);
+    el.querySelector('.app-name').textContent=group.depth===1?sourceAddress(r)||processLabel(r):processLabel(r);
     const expander=el.querySelector('.expander');
     expander.hidden=!group.members;
     if(group.members) {
-      const open=group.depth===0?expandedApps.has(group.key):!collapsedProcesses.has(group.key);
+      const open=expandedApps.has(group.key);
       expander.setAttribute('aria-expanded',String(open));
-      expander.setAttribute('aria-label',(open?'Collapse ':'Expand ')+(group.depth===0?r.app:'PID '+(r.pid||'unavailable')));
-      expander.title=open?'Collapse':'Expand processes and connections';
+      expander.setAttribute('aria-label',(open?'Collapse ':'Expand ')+r.app);
+      expander.title=open?'Collapse':'Expand connections';
     }
     const summary=r.summary;
     el.querySelector('.application').title=summary?`${r.app}\nPIDs: ${summary.pids.join(', ')||'unavailable'}\n${summary.connections} connection groups · ${group.count} connection events`:[r.path?`${r.app} · PID ${r.pid}\n${r.path}`:r.owner_evidence,`${r.protocol} · ${r.inbound}`,sourceLabel(r)].filter(Boolean).join('\n');
@@ -425,6 +418,9 @@ function render(activityUpdate=false,preserveOrder=false) {
     pid.textContent=summary && summary.pids.length>1?`${summary.pids.length} PIDs`:pidLabel(r);
     pid.title=summary?'Process IDs: '+(summary.pids.join(', ')||'unavailable'):r.pid?'Process ID from the original connection event':'Process ID unavailable for this event';
     el.querySelector('.protocol').textContent=r.protocol||'—';
+    const gateway=el.querySelector('.gateway');
+    gateway.textContent=summary?summary.inbounds.map(gatewayLabel).join('/'):gatewayLabel(r.inbound);
+    gateway.title=summary?'Xray inbound tags: '+summary.inbounds.join(', '):'Xray inbound tag: '+(r.inbound||'unavailable');
     el.querySelector('.destination').textContent=summary?`${summary.destinations.length} destination${summary.destinations.length===1?'':'s'}`:r.destination.includes(':')?`[${r.destination}]:${r.port}`:`${r.destination}:${r.port}`;
     const badge=el.querySelector('.route');
     badge.className='route '+(Object.hasOwn(routeNames,r.outbound)?r.outbound:'');
@@ -545,7 +541,7 @@ window.addEventListener('pywebviewready',async()=>{
     const preferences=await window.pywebview.api.get_preferences();$('hide-unknown').checked=preferences.hide_unknown===true;
     $('group-app').checked=preferences.group_by_app===true;
     $('auto-reload').checked=preferences.auto_reload===true;
-    if(['app','protocol','route','time','traffic'].includes(preferences.sort_field))sortField=preferences.sort_field;
+    if(['app','protocol','gateway','route','time','traffic'].includes(preferences.sort_field))sortField=preferences.sort_field;
     if(['asc','desc'].includes(preferences.sort_direction))sortDirection=preferences.sort_direction;
   }catch(e){}
   updateSortIndicators();

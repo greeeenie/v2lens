@@ -5,7 +5,7 @@ import sqlite3
 import tempfile
 import unittest
 
-from template_editor import TemplateConflict, TemplateError, TemplateStore
+from v2lens.template_editor import TemplateConflict, TemplateError, TemplateStore
 
 
 class TemplateStoreTests(unittest.TestCase):

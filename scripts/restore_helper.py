@@ -5,7 +5,7 @@ from pathlib import Path
 import urllib.request
 import zipfile
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 PACKAGES = [
     ('microsoft.diagnostics.tracing.traceevent','2.0.77','0055b65a090d4e7b179bd32fc9365bdcc1f70f7f3d081685f93b2067436c0850',{
         **{'lib/net45/'+name:'traffic-helper/'+name for name in [
@@ -35,6 +35,7 @@ def restore():
         if hashlib.sha256(data).hexdigest()!=digest:raise ValueError(f'Checksum mismatch: {filename}')
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             for source,target in files.items():
+                target=target.replace('traffic-helper/','native/traffic-observer/').replace('licenses/','src/v2lens/resources/licenses/')
                 destination=ROOT/target
                 destination.parent.mkdir(parents=True,exist_ok=True)
                 destination.write_bytes(archive.read(source))

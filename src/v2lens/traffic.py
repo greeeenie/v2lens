@@ -8,11 +8,11 @@ from pathlib import Path
 import shutil
 import subprocess
 import time
-from app_paths import ASSETS
+from .app_paths import HELPER
 
 
 def group_key(record):
-    return tuple(record.get(field) for field in ('app', 'pid', 'protocol', 'destination', 'port', 'outbound'))
+    return tuple(record.get(field) for field in ('app', 'pid', 'protocol', 'destination', 'port', 'inbound', 'outbound'))
 
 
 class TrafficMonitor:
@@ -25,7 +25,7 @@ class TrafficMonitor:
     def enable(self):
         if self.requested:
             return True
-        source = ASSETS/'traffic-helper'
+        source = HELPER
         version = hashlib.sha256((source/'TrafficObserver.exe').read_bytes()).hexdigest()[:16]
         directory = self.state/'runtime'/version/'traffic-helper'
         if not (directory/'TrafficObserver.exe').is_file():

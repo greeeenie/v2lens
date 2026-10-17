@@ -5,9 +5,9 @@ import threading
 import unittest
 from unittest.mock import Mock, patch
 
-import app_paths
-from template_editor import TemplateConflict
-from web_panel import Bridge
+from v2lens import app_paths
+from v2lens.template_editor import TemplateConflict
+from v2lens.web_panel import Bridge
 
 
 class PortableTests(unittest.TestCase):
@@ -24,23 +24,23 @@ class PortableTests(unittest.TestCase):
         bridge=Bridge.__new__(Bridge)
         bridge._template=Mock(client=Path('client'))
         bridge._template.save.return_value={'revision':'new','enabled':True}
-        with patch('web_panel.reload_client',return_value=True) as reload:
+        with patch('v2lens.web_panel.reload_client',return_value=True) as reload:
             self.assertTrue(bridge.save_template('{}','old',True)['reloaded'])
             reload.assert_called_once_with(Path('client'))
-        with patch('web_panel.reload_client',side_effect=ValueError('Reload failed')):
+        with patch('v2lens.web_panel.reload_client',side_effect=ValueError('Reload failed')):
             result=bridge.save_template('{}','old',True)
             self.assertTrue(result['ok'])
             self.assertEqual(result['revision'],'new')
             self.assertEqual(result['reload_error'],'Reload failed')
         bridge._template.save.side_effect=TemplateConflict('Changed elsewhere')
-        with patch('web_panel.reload_client') as reload:
+        with patch('v2lens.web_panel.reload_client') as reload:
             self.assertFalse(bridge.save_template('{}','old',True)['ok'])
             reload.assert_not_called()
 
     def test_reload_off_or_disabled_template_never_reloads(self):
         bridge=Bridge.__new__(Bridge)
         bridge._template=Mock(client=Path('client'))
-        with patch('web_panel.reload_client') as reload:
+        with patch('v2lens.web_panel.reload_client') as reload:
             for enabled,auto in [(True,False),(False,True)]:
                 bridge._template.save.return_value={'revision':'new','enabled':enabled}
                 self.assertTrue(bridge.save_template('{}','old',auto)['ok'])

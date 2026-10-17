@@ -8,9 +8,10 @@ import tempfile
 import psutil
 
 
-ASSETS = Path(__file__).resolve().parent
+ASSETS = Path(__file__).resolve().parent/'resources'
 FROZEN = bool(getattr(sys, 'frozen', False))
-APP_HOME = Path(sys.executable).resolve().parent if FROZEN else ASSETS
+APP_HOME = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parents[2]
+HELPER = ASSETS/'traffic-helper' if FROZEN else APP_HOME/'native/traffic-observer'
 
 
 def find_client(explicit=None):

@@ -11,7 +11,7 @@ import threading
 import time
 
 import psutil
-from app_paths import find_client, state_directory
+from .app_paths import find_client, state_directory
 
 ROUTES = {'proxy': 'Proxy', 'direct': 'Direct', 'block': 'Blocked', 'dns': 'DNS Xray'}
 LINE = re.compile(r'^(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d+) from (\S+) (accepted|rejected) (\S+) \[([^\]]+)\]')
@@ -211,7 +211,7 @@ def main():
     client=find_client(args.v2ray_dir)
     state=state_directory(client)
     if args.reload_test:
-        from client_reload import reload_client
+        from .client_reload import reload_client
         try:
             report={'ok':reload_client(client)}
         except Exception as error:
@@ -219,23 +219,23 @@ def main():
         args.reload_test.write_text(json.dumps(report),encoding='utf-8')
         return
     if args.diagnose:
-        from app_paths import ASSETS
-        from web_panel import Bridge
+        from .app_paths import ASSETS, HELPER
+        from .web_panel import Bridge
         report={'client':str(client),'state':str(state),'assets':str(ASSETS),
                 'database':(client/'guiConfigs/guiNDB.db').is_file(),
                 'panel':(ASSETS/'panel.html').is_file(),'editor':(ASSETS/'json-editor.js').is_file(),
-                'traffic_helper':(ASSETS/'traffic-helper/TrafficObserver.exe').is_file()}
+                'traffic_helper':(HELPER/'TrafficObserver.exe').is_file()}
         args.diagnose.write_text(json.dumps(report,indent=2),encoding='utf-8')
         return
     collector=Collector(client,state);collector.thread.start()
     if args.collect_seconds:
         time.sleep(args.collect_seconds);collector.stop.set()
         print(json.dumps(collector.snapshot(),ensure_ascii=False,indent=2));return
-    from web_panel import run
+    from .web_panel import run
     run(collector, state, smoke_test=args.smoke_test)
 
 
-if __name__=='__main__':
+def launch():
     try:
         main()
     except Exception as error:
@@ -244,3 +244,6 @@ if __name__=='__main__':
             ctypes.windll.user32.MessageBoxW(None,str(error),'V2Lens',0x10)
         else:
             raise
+
+
+if __name__=='__main__':launch()

@@ -6,10 +6,10 @@ build/
 dist/
 state/
 V2Lens-data/
-editor/node_modules/
-traffic-helper/*.exe
-traffic-helper/*.dll
-traffic-helper/amd64/
+frontend/node_modules/
+native/**/*.exe
+native/**/*.dll
+src/*.egg-info/
 *.spec
 *.db
 *.db-*

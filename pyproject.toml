@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "v2lens"
+version = "0.1.0"
+description = "Minimal Xray connection viewer and v2rayN TUN template editor"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{name = "greeeenie"}]
+dependencies = ["psutil==7.2.2", "pywebview==6.2.1"]
+
+[project.optional-dependencies]
+build = ["pyinstaller==6.22.3", "pillow==13.0.0"]
+
+[project.urls]
+Repository = "https://github.com/greeeenie/v2lens"
+Releases = "https://github.com/greeeenie/v2lens/releases"
+
+[project.gui-scripts]
+v2lens = "v2lens.viewer:launch"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+v2lens = ["resources/*", "resources/licenses/*"]
