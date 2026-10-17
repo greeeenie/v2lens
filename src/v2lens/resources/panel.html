@@ -33,26 +33,29 @@
   .window-controls .close:hover { background:#8b3743; color:white; }
   .window-controls svg { width:12px; height:12px; pointer-events:none; }
   main { display:flex; flex:1; flex-direction:column; min-height:0; padding:14px 29px 0; }
-  .heading { display:flex; align-items:center; justify-content:space-between; gap:15px; margin-bottom:23px; }
+  .heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px 15px; margin-bottom:23px; }
   .view-tabs { display:flex; align-items:center; gap:23px; flex-shrink:0; }
   .view-tab { padding:0 0 7px; background:none; border:0; color:var(--faint); font-size:20px; font-weight:600; letter-spacing:-.5px; }
   .view-tab:hover { color:var(--muted); }
   .view-tab[aria-selected="true"] { color:var(--text); }
   .connections-view,.template-view { display:flex; flex:1; flex-direction:column; min-height:0; }
   .template-view { padding-bottom:23px; }
-  .template-modes { display:flex; width:fit-content; margin-bottom:12px; }
-  .template-actions { display:flex; gap:13px; align-items:center; min-width:0; }
-  .template-status { font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .template-toolbar { display:flex; align-items:center; gap:16px; min-width:0; min-height:37px; margin-bottom:12px; }
+  .template-modes { display:flex; width:fit-content; flex-shrink:0; }
+  .template-actions { display:flex; gap:16px; align-items:center; margin-left:auto; min-width:0; }
+  .template-auto-reload { padding-right:17px; border-right:1px solid var(--edge); min-height:24px; }
+  .template-edit-actions { display:flex; align-items:center; gap:6px; }
+  .template-status { margin-left:auto; min-width:0; font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .template-status.error { color:#d6a09c; }
   .template-status:empty { display:none; }
   .template-reload { border:0; padding:0; background:none; color:var(--proxy); font-size:11px; white-space:nowrap; }
-  .template-save { border:1px solid #504762; border-radius:8px; background:#312b41; color:#e4dcfa; padding:7px 16px; flex-shrink:0; }
+  .template-save { border:1px solid #504762; border-radius:8px; background:#312b41; color:#e4dcfa; height:33px; padding:0 17px; flex-shrink:0; }
   .template-save:hover:not(:disabled) { background:#413750; }
   .template-save:disabled { opacity:.4; cursor:default; }
   .template-editor { display:block; flex:1; width:100%; min-height:0; overflow:hidden; border:1px solid var(--edge); border-radius:9px; background:#15181b; }
   .template-editor:focus-within { border-color:#524c64; }
-  .template-format { border:0; padding:6px 0; background:none; color:var(--muted); font-size:11px; white-space:nowrap; flex-shrink:0; }
-  .template-format:hover { color:var(--text); }
+  .template-format { border:1px solid transparent; border-radius:7px; padding:0 10px; height:33px; background:none; color:var(--muted); font-size:11px; white-space:nowrap; flex-shrink:0; }
+  .template-format:hover:not(:disabled) { color:var(--text); background:#ffffff05; border-color:var(--edge); }
   .template-format:disabled { opacity:.4; cursor:default; }
   h1 { font-size:24px; font-weight:600; letter-spacing:-.7px; margin:0; }
   .view-options { display:flex; align-items:center; gap:18px; flex-wrap:wrap; justify-content:flex-end; }
@@ -140,7 +143,11 @@
     <div class="heading">
       <nav class="view-tabs" id="view-tabs" role="tablist" aria-label="View"><button class="view-tab" id="connections-tab" role="tab" aria-selected="true" aria-controls="connections-view">Connections</button><button class="view-tab" id="template-tab" role="tab" aria-selected="false" aria-controls="template-view" tabindex="-1">Template</button></nav>
       <div class="view-options" id="connection-options"><label class="toggle"><input type="checkbox" id="group-app">Group by application</label><label class="toggle"><input type="checkbox" id="hide-unknown">Hide unknown processes</label></div>
-      <div class="template-actions" id="template-actions" hidden><span class="template-status" id="template-status" role="status" aria-live="polite"></span><button class="template-reload" id="reload-template" hidden>Load latest</button><label class="toggle" title="Reload v2rayN after saving a valid template"><input type="checkbox" id="auto-reload">Auto-reload v2rayN</label><button class="template-format" id="expand-template" disabled>Expand all</button><button class="template-format" id="format-template" disabled title="Format JSON · Ctrl+Shift+F">Format</button><button class="template-save" id="save-template" disabled title="Save template · Ctrl+S">Save</button></div>
+      <div class="template-actions" id="template-actions" hidden>
+        <label class="toggle template-auto-reload" title="Reload v2rayN after saving a valid template"><input type="checkbox" id="auto-reload">Auto-reload v2rayN</label>
+        <div class="template-edit-actions"><button class="template-format" id="expand-template" disabled>Expand all</button><button class="template-format" id="format-template" disabled title="Format JSON · Ctrl+Shift+F">Format</button></div>
+        <button class="template-save" id="save-template" disabled title="Save template · Ctrl+S">Save</button>
+      </div>
     </div>
     <section class="connections-view" id="connections-view" role="tabpanel" aria-labelledby="connections-tab">
     <div class="tools">
@@ -162,7 +169,10 @@
     </section>
     <footer><span id="total">Xray log · last 15 minutes</span><span><button class="traffic-enable" id="enable-traffic" title="Enable Windows traffic counters. Windows will ask for administrator permission.">Enable traffic</button><span id="traffic-status"></span></span><span id="updated"></span></footer>
     </section>
-    <section class="template-view" id="template-view" role="tabpanel" aria-labelledby="template-tab" hidden><div class="template-modes segments" role="group" aria-label="Template mode" title="Select which template to edit; this does not toggle TUN in v2rayN"><button data-template-mode="tun" aria-pressed="true">TUN</button><button data-template-mode="standard" aria-pressed="false">Without TUN</button></div><div class="template-editor" id="template-editor"></div></section>
+    <section class="template-view" id="template-view" role="tabpanel" aria-labelledby="template-tab" hidden>
+      <div class="template-toolbar"><div class="template-modes segments" role="group" aria-label="Template mode" title="Select which template to edit; this does not toggle TUN in v2rayN"><button data-template-mode="tun" aria-pressed="true">TUN</button><button data-template-mode="standard" aria-pressed="false">Without TUN</button></div><span class="template-status" id="template-status" role="status" aria-live="polite"></span><button class="template-reload" id="reload-template" hidden>Load latest</button></div>
+      <div class="template-editor" id="template-editor"></div>
+    </section>
   </main>
 </div>
 <!-- JSON_EDITOR_BUNDLE -->
