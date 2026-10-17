@@ -43,6 +43,16 @@ try {
   assert.deepEqual(await page.locator('.connection-row .pid').allTextContents(),['1','1','2']);
   assert.ok((await page.locator('.connection-row .app-name').allTextContents()).every(name=>name.startsWith('172.18.0.1:')));
   assert.ok((await page.locator('.row').evaluateAll(rows=>rows.map(r=>r.children.length))).every(count=>count===7),'Headers and rows have seven columns');
+  assert.deepEqual(await page.locator('.row').first().evaluate(row=>[...row.children].map(cell=>cell.className)),['application','pid','protocol','target','gateway','route proxy','traffic'],'Gateway and route are adjacent; traffic is last');
+  for(const width of [690,800,920,980,1280]) {
+    await page.setViewportSize({width,height:720});
+    assert.ok(await page.locator('.row').first().evaluate(row=>row.scrollWidth<=row.clientWidth+1),'Columns fit at '+width+'px');
+    const aligned=await page.evaluate(()=>{
+      const headers=[...document.querySelector('.columns').children],cells=[...document.querySelector('.row').children];
+      return headers.every((header,i)=>Math.abs(header.getBoundingClientRect().left-cells[i].getBoundingClientRect().left)<1);
+    });
+    assert.ok(aligned,'Column headings align with their cells at '+width+'px');
+  }
   await page.getByRole('button',{name:'Gateway',exact:true}).click();
   assert.equal(await page.locator('[data-sort-cell="gateway"]').getAttribute('aria-sort'),'ascending');
   await page.getByRole('button',{name:'Collapse Demo.exe',exact:true}).click();
