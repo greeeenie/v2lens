@@ -57,6 +57,17 @@ function highlightFold(view,line) {
 function clearFoldHighlight(view) {
   if(view.state.field(foldHover).size)view.dispatch({effects:hoverFold.of(null)});
 }
+function foldMarker(open) {
+  const marker=document.createElement('span');
+  marker.className='cm-foldArrow';marker.title=open?'Fold line':'Unfold line';
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('viewBox','0 0 12 12');svg.setAttribute('aria-hidden','true');
+  const path=document.createElementNS(svg.namespaceURI,'path');
+  path.setAttribute('d',open?'M3 4.5 6 7.5 9 4.5':'M4.5 3 7.5 6 4.5 9');
+  path.setAttribute('fill','none');path.setAttribute('stroke','currentColor');
+  path.setAttribute('stroke-width','1.25');path.setAttribute('stroke-linecap','round');path.setAttribute('stroke-linejoin','round');
+  svg.append(path);marker.append(svg);return marker;
+}
 const theme=EditorView.theme({
   '&':{height:'100%',color:'#c2c9d4',backgroundColor:'#15181b',fontSize:'12px'},
   '&.cm-focused':{outline:'none'},
@@ -71,6 +82,8 @@ const theme=EditorView.theme({
   '.cm-foldHover .cm-foldPlaceholder':{backgroundColor:'#3b344b',color:'#e0d5f5'},
   '.cm-foldGutter .cm-gutterElement':{cursor:'pointer',color:'#858391',padding:'0 3px'},
   '.cm-foldGutter .cm-gutterElement:hover':{color:'#d5c8eb'},
+  '.cm-foldGutter .cm-foldArrow':{display:'flex',alignItems:'center',justifyContent:'center',width:'12px',height:'1.65em',padding:'0'},
+  '.cm-foldArrow svg':{display:'block',width:'12px',height:'12px',pointerEvents:'none'},
   '.cm-addValue':{display:'inline-block',width:'18px',height:'18px',marginLeft:'8px',padding:'0',border:'0',borderRadius:'4px',background:'transparent',color:'#858391',font:'15px/18px "Segoe UI",sans-serif',verticalAlign:'middle',cursor:'pointer'},
   '.cm-addValue:hover,.cm-addValue:focus-visible':{background:'#b2aafa19',color:'#ded7ee'},
   '.cm-foldPlaceholder':{backgroundColor:'#252831',border:'none',borderRadius:'4px',color:'#a89abd',padding:'0 5px',cursor:'pointer'},
@@ -153,7 +166,7 @@ export function create(parent,{onChange,onSave,onError,onFoldsChange=()=>{}}) {
     }
   },{decorations:plugin=>plugin.decorations});
   const extensions=()=>[
-    lineNumbers(),foldHover,foldGutter({domEventHandlers:{
+    lineNumbers(),foldHover,foldGutter({markerDOM:foldMarker,domEventHandlers:{
       mouseover:(view,line)=>{highlightFold(view,line);return false;},
       mouseout:(view,line,event)=>{
         if(!event.target.closest('.cm-gutterElement')?.contains(event.relatedTarget))clearFoldHighlight(view);

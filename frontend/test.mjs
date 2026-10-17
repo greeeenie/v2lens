@@ -60,8 +60,8 @@ try {
   const colors=await page.locator('.cm-content .cm-line span').evaluateAll(elements=>[...new Set(elements.map(e=>getComputedStyle(e).color))]);
   assert.ok(colors.length>=3,'JSON keys, strings and values have distinct highlighting');
   const lines=await page.locator('.cm-line').count();
-  assert.equal((await page.locator('.cm-foldGutter .cm-gutterElement').nth(1).textContent()).trim(),'⌄','Root object can be folded');
-  await page.locator('.cm-foldGutter .cm-gutterElement').filter({hasText:'⌄'}).first().click();
+  assert.equal(await page.locator('.cm-foldGutter .cm-gutterElement').nth(1).locator('[title="Fold line"]').count(),1,'Root object can be folded');
+  await page.locator('.cm-foldGutter [title="Fold line"]').filter({visible:true}).first().click();
   await page.locator('.cm-foldPlaceholder').waitFor();
   assert.ok(await page.locator('.cm-line').count()<lines,'Folding hides block contents');
   assert.ok(await page.locator('.cm-line').count()<=2,'Root object folds completely (with an optional final blank line)');
@@ -80,7 +80,7 @@ try {
   assert.equal((await page.evaluate(()=>window.testSaved))[0].text,formatted,'Saved JSON is exactly what the editor displays');
   assert.equal((await page.evaluate(()=>window.testSaved))[0].auto_reload,true,'Save passes the checked auto-reload option');
   assert.match(await page.locator('#template-status').textContent(),/v2rayN reloaded/);
-  await page.locator('.cm-foldGutter .cm-gutterElement').filter({hasText:'⌄'}).nth(1).click();
+  await page.locator('.cm-foldGutter [title="Fold line"]').filter({visible:true}).nth(1).click();
   await page.waitForFunction(()=>JSON.stringify(window.testFoldState.folds)==='[["routing"]]');
   await page.evaluate(text=>getTemplateEditor().setValue(text,{folds:[['routing']]}),sample);
   await page.getByRole('button',{name:'Format',exact:true}).click();

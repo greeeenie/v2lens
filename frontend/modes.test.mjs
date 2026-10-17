@@ -30,7 +30,7 @@ try {
   await page.waitForFunction(()=>templateLoaded);
   await page.getByRole('button',{name:'Format',exact:true}).click();
   const tunDraft=await page.evaluate(()=>getTemplateEditor().getValue());
-  await page.locator('.cm-foldGutter .cm-gutterElement').filter({hasText:'⌄'}).first().click();
+  await page.locator('.cm-foldGutter [title="Fold line"]').filter({visible:true}).first().click();
   await page.waitForFunction(()=>window.folds.tun.folds.length===1);
   await page.getByRole('button',{name:'Without TUN',exact:true}).click();
   await page.waitForFunction(()=>templateLoaded&&!templateBusy);
