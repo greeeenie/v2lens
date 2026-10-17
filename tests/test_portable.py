@@ -23,6 +23,7 @@ class PortableTests(unittest.TestCase):
     def test_saved_template_reload_success_and_failure_are_distinct(self):
         bridge=Bridge.__new__(Bridge)
         bridge._template=Mock(client=Path('client'))
+        bridge._template.active_mode.return_value='tun'
         bridge._template.save.return_value={'revision':'new','enabled':True}
         with patch('v2lens.web_panel.reload_client',return_value=True) as reload:
             self.assertTrue(bridge.save_template('{}','old',True)['reloaded'])
@@ -44,6 +45,16 @@ class PortableTests(unittest.TestCase):
             for enabled,auto in [(True,False),(False,True)]:
                 bridge._template.save.return_value={'revision':'new','enabled':enabled}
                 self.assertTrue(bridge.save_template('{}','old',auto)['ok'])
+            reload.assert_not_called()
+
+    def test_inactive_template_does_not_restart_active_mode(self):
+        bridge=Bridge.__new__(Bridge)
+        bridge._template=Mock(client=Path('client'))
+        bridge._template.active_mode.return_value='tun'
+        bridge._template.save.return_value={'revision':'new','enabled':True}
+        with patch('v2lens.web_panel.reload_client') as reload:
+            result=bridge.save_template('{}','old',True,'standard')
+            self.assertEqual(result['applies_when'],'standard')
             reload.assert_not_called()
 
     def test_auto_reload_preference_survives_other_preferences(self):

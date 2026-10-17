@@ -60,6 +60,7 @@ export function create(parent,{onChange,onSave,onError,onFoldsChange=()=>{}}) {
   const mode=new Compartment();
   let readOnly=true,view,restoring=false,lastFolds='[]';
   const foldPaths=()=>{
+    if(!view.state.doc.toString().trim())return [];
     const blocks=jsonBlocks(view.state.doc.toString()),paths=[];
     foldedRanges(view.state).between(0,view.state.doc.length,(from,to)=>{
       const block=blocks.find(({node})=>{const range=foldInside(node);return range?.from===from && range.to===to;});
@@ -75,6 +76,7 @@ export function create(parent,{onChange,onSave,onError,onFoldsChange=()=>{}}) {
     }catch{} // Keep the last valid state while a JSON edit is incomplete.
   };
   const restoreFolds=paths=>{
+    if(!view.state.doc.toString().trim()){unfoldAll(view);return;}
     const wanted=new Set(paths.map(path=>JSON.stringify(path)));
     const effects=jsonBlocks(view.state.doc.toString()).filter(block=>wanted.has(JSON.stringify(block.path)))
       .map(({node})=>foldInside(node)).filter(range=>range && range.from<range.to).map(range=>foldEffect.of(range));
@@ -123,7 +125,7 @@ export function create(parent,{onChange,onSave,onError,onFoldsChange=()=>{}}) {
     json(),syntaxHighlighting(colors),indentOnInput(),indentUnit.of('  '),bracketMatching(),
     closeBrackets(),highlightActiveLine(),linter(jsonParseLinter(),{delay:350}),theme,
     mode.of([EditorState.readOnly.of(readOnly),EditorView.editable.of(!readOnly)]),
-    EditorView.contentAttributes.of({'aria-label':'Full TUN template JSON','spellcheck':'false'}),
+    EditorView.contentAttributes.of({'aria-label':'Full Xray template JSON','spellcheck':'false'}),
     keymap.of([
       {key:'Mod-s',preventDefault:true,run:()=>{onSave();return true;}},
       {key:'Mod-Shift-f',preventDefault:true,run:format},
@@ -138,6 +140,12 @@ export function create(parent,{onChange,onSave,onError,onFoldsChange=()=>{}}) {
   view=new EditorView({state:EditorState.create({doc:'',extensions:extensions()}),parent});
   return {
     getValue:()=>view.state.doc.toString(),
+    captureState:()=>view.state,
+    restoreState:state=>{
+      restoring=true;
+      try{view.setState(state);readOnly=state.readOnly;try{lastFolds=JSON.stringify(foldPaths());}catch{lastFolds='[]';}}
+      finally{restoring=false;}
+    },
     setValue:(text,{folds=[]}={})=>{
       restoring=true;
       try {

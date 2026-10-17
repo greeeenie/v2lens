@@ -1,7 +1,7 @@
 <p align="center"><img src="brand/v2lens.png" width="80" alt="V2Lens"></p>
 <h1 align="center">V2Lens</h1>
 <p align="center"><a href="../README.md">English</a> · <b>Русский</b></p>
-<p align="center">Минималистичный просмотр соединений Xray и редактор TUN-шаблона v2rayN.</p>
+<p align="center">Минималистичный просмотр соединений Xray и редактор шаблонов v2rayN.</p>
 
 **[Скачать для Windows x64](https://github.com/greeeenie/v2lens/releases/latest)**
 
@@ -18,10 +18,11 @@
 ### Возможности
 
 - **Connections:** приложение → соединения с PID, протоколом, адресом, скоростью, **Gateway (TUN / SOCKS)** и **Route (Proxy / Direct)**. Поиск, сортировка и группировка; промежуточных строк PID нет.
-- **[Template](screenshots/template.png):** подсветка JSON, сохранение свёрнутости, Format, Expand all и **+** с определением типа. Save проверяет конфиг штатным Xray; галочка **Auto-reload v2rayN** применяет сохранённый шаблон.
+- **[Template](screenshots/template.png):** отдельные шаблоны **TUN / Without TUN**, черновики, история отмены и сохранение свёрнутости. Подсветка JSON, Format, Expand all и **+** с определением типа. Save проверяет каждый шаблон штатным Xray.
+- **Размер окна:** меняется за любой край или угол. **Auto-reload v2rayN** перезагружает клиент только при редактировании текущего режима.
 - **Переносимость:** настройки в `V2Lens-data` рядом с EXE, при необходимости — в `%LOCALAPPDATA%\V2Lens`. Серверы, подписки и личные журналы в сборку не входят.
 
-Template редактирует включённый **Full Config Template → Xray TUN template**, а не обычные routing profiles. Авторелоад по умолчанию выключен. Журнал показывает решения Xray; соединения в обход него могут отсутствовать.
+Template редактирует **Full Config Template → Xray** (`TunConfig` / `Config`), а не routing profiles. Выбор шаблона не переключает TUN. Пустое поле означает настройки v2rayN по умолчанию; конфиги между режимами не копируются. Авторелоад по умолчанию выключен. Журнал показывает решения Xray; соединения в обход него могут отсутствовать.
 
 <details><summary>Сборка из исходников</summary>
 
@@ -34,6 +35,7 @@ npm run build --prefix frontend
 python -m unittest discover -s tests
 node frontend/test.mjs
 node frontend/connections.test.mjs
+node frontend/modes.test.mjs
 python scripts/build.py
 ```
 

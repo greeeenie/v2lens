@@ -1,7 +1,7 @@
 <p align="center"><img src="docs/brand/v2lens.png" width="80" alt="V2Lens"></p>
 <h1 align="center">V2Lens</h1>
 <p align="center"><b>English</b> · <a href="docs/README.ru.md">Русский</a></p>
-<p align="center">Minimal Xray connections and v2rayN TUN template editor for Windows.</p>
+<p align="center">Minimal Xray connections and v2rayN template editor for Windows.</p>
 
 **[Download for Windows x64](https://github.com/greeeenie/v2lens/releases/latest)**
 
@@ -18,10 +18,11 @@
 ### What it does
 
 - **Connections:** application → connections with PIDs, protocol, destination, speed, **Gateway (TUN / SOCKS)** and **Route (Proxy / Direct)**. Search, sort and group by application; no intermediate PID groups.
-- **[Template editor](docs/screenshots/template.png):** JSON highlighting, persistent folding, Format, Expand all and context-aware **+** insertion. Save validates with the installed Xray; optional **Auto-reload v2rayN** applies the saved template.
+- **[Template editor](docs/screenshots/template.png):** separate **TUN / Without TUN** templates, drafts, undo and persistent folds. JSON highlighting, Format, Expand all and context-aware **+** insertion. Save validates each template with the installed Xray.
+- **Resizable window:** drag any edge or corner. Optional **Auto-reload v2rayN** reloads only when editing the active mode.
 - **Portable:** local UI state in `V2Lens-data` beside the EXE; falls back to `%LOCALAPPDATA%\V2Lens` if needed. No servers, subscriptions or personal logs are shipped.
 
-Template edits the enabled **Full Config Template → Xray TUN template** in v2rayN, not ordinary routing profiles. Auto-reload is off by default. Connections shows Xray's routing decisions; traffic bypassing Xray can be absent.
+Template edits **Full Config Template → Xray** (`TunConfig` / `Config`), not routing profiles. Selecting a template does not toggle TUN. An empty field uses v2rayN defaults; no config is copied between modes. Auto-reload is off by default. Connections shows Xray's routing decisions; traffic bypassing Xray can be absent.
 
 <details><summary>Build from source</summary>
 
@@ -34,6 +35,7 @@ npm run build --prefix frontend
 python -m unittest discover -s tests
 node frontend/test.mjs
 node frontend/connections.test.mjs
+node frontend/modes.test.mjs
 python scripts/build.py
 ```
 

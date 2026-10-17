@@ -5,11 +5,27 @@ import sqlite3
 import subprocess
 from pathlib import Path
 import threading
+import time
 import webview
 from .traffic import TrafficMonitor
 from .template_editor import TemplateConflict, TemplateStore
 from .app_paths import ASSETS
 from .client_reload import reload_client
+
+
+def resized_bounds(bounds, minimum, edge, dx, dy):
+    if edge not in ('left','right','top','bottom','top-left','top-right','bottom-left','bottom-right'):
+        raise ValueError('Invalid resize edge')
+    x,y,width,height=bounds
+    if 'left' in edge:
+        changed=max(minimum[0],width-dx)
+        x+=width-changed;width=changed
+    elif 'right' in edge:width=max(minimum[0],width+dx)
+    if 'top' in edge:
+        changed=max(minimum[1],height-dy)
+        y+=height-changed;height=changed
+    elif 'bottom' in edge:height=max(minimum[1],height+dy)
+    return x,y,width,height
 
 
 class Bridge:
@@ -19,20 +35,21 @@ class Bridge:
         self._window = None
         self._maximized = False
         self._preferences_lock = threading.Lock()
+        self._resize_lock = threading.Lock()
         self._traffic = TrafficMonitor(state)
         self._template = TemplateStore(collector.client)
 
-    def get_template(self):
+    def get_template(self, mode='tun'):
         try:
-            return {'ok': True, **self._template.load()}
+            return {'ok': True, **self._template.load(mode)}
         except (OSError, ValueError, sqlite3.Error) as error:
             return {'ok': False, 'error': str(error)}
 
-    def save_template(self, text, revision, auto_reload=False):
+    def save_template(self, text, revision, auto_reload=False, mode='tun'):
         try:
             if not isinstance(auto_reload, bool):
                 raise ValueError('Expected an auto-reload checkbox state')
-            result = {'ok': True, **self._template.save(text, revision)}
+            result = {'ok': True, **self._template.save(text, revision, mode)}
         except TemplateConflict as error:
             return {'ok': False, 'error': str(error), 'conflict': True}
         except (OSError, ValueError, sqlite3.Error) as error:
@@ -41,16 +58,27 @@ class Bridge:
             return {'ok': False, 'error': 'Xray validation timed out. The template was not saved.'}
         if auto_reload and result['enabled']:
             try:
-                reload_client(self._template.client)
-                result['reloaded'] = True
+                active = self._template.active_mode()
+                if active == mode:
+                    reload_client(self._template.client)
+                    result['reloaded'] = True
+                elif active is None:
+                    result['reload_error'] = 'Cannot identify the active mode. Use Reload in v2rayN.'
+                else:
+                    result['applies_when'] = mode
             except (OSError, ValueError) as error:
                 result['reload_error'] = str(error)
         return result
 
-    def get_editor_state(self):
+    def _editor_state_path(self, mode):
+        TemplateStore.field(mode)
+        return self._state/('editor.json' if mode=='tun' else 'editor-standard.json')
+
+    def get_editor_state(self, mode='tun'):
+        path = self._editor_state_path(mode)
         with self._preferences_lock:
             try:
-                value = json.loads((self._state/'editor.json').read_text(encoding='utf-8'))
+                value = json.loads(path.read_text(encoding='utf-8'))
                 return {'folds': self._validate_folds(value['folds'])}
             except (OSError, ValueError, KeyError, TypeError):
                 return {'folds': []}
@@ -66,12 +94,13 @@ class Bridge:
                 raise ValueError('Invalid editor fold path')
         return folds
 
-    def set_editor_state(self, value):
+    def set_editor_state(self, value, mode='tun'):
+        path = self._editor_state_path(mode)
         folds = self._validate_folds(value['folds'])
         with self._preferences_lock:
-            temp = self._state/'editor.tmp'
+            temp = path.with_suffix('.tmp')
             temp.write_text(json.dumps({'folds': folds}), encoding='utf-8')
-            temp.replace(self._state/'editor.json')
+            temp.replace(path)
         return True
 
     def snapshot(self):
@@ -146,12 +175,46 @@ class Bridge:
     def minimize(self):
         self._window.minimize()
 
+    def begin_resize(self, edge):
+        resized_bounds((0,0,0,0),(0,0),edge,0,0)
+        import ctypes
+        from ctypes import wintypes
+        from System import Action
+        native = self._window.native
+        # Borderless WinForms has no Windows sizing frame. Track the held drag
+        # and update native bounds on its UI thread, including outside WebView.
+        if not self._resize_lock.acquire(blocking=False):return
+        try:
+            user32 = ctypes.WinDLL('user32',use_last_error=True)
+            user32.GetAsyncKeyState.restype = ctypes.c_short
+            user32.GetCursorPos.argtypes = [ctypes.POINTER(wintypes.POINT)]
+            start = wintypes.POINT()
+            if not user32.GetAsyncKeyState(1)&0x8000 or not user32.GetCursorPos(ctypes.byref(start)):return
+            initial=[]
+            def capture():
+                if str(native.WindowState)!='Maximized':
+                    initial.extend([(native.Left,native.Top,native.Width,native.Height),(native.MinimumSize.Width,native.MinimumSize.Height)])
+            native.Invoke(Action(capture))
+            if not initial:return
+            previous=initial[0]
+            while not self._collector.stop.is_set() and user32.GetAsyncKeyState(1)&0x8000:
+                cursor=wintypes.POINT()
+                if not user32.GetCursorPos(ctypes.byref(cursor)):break
+                bounds=resized_bounds(*initial,edge,cursor.x-start.x,cursor.y-start.y)
+                if bounds!=previous:
+                    native.Invoke(Action(lambda: native.SetBounds(*bounds)))
+                    previous=bounds
+                time.sleep(1/60)
+        finally:
+            self._resize_lock.release()
+
     def maximize(self):
         if self._maximized:
             self._window.restore()
         else:
             self._window.maximize()
         self._maximized = not self._maximized
+        return self._maximized
 
     def close(self):
         self._collector.stop.set()
@@ -166,7 +229,7 @@ def run(collector, state, smoke_test=None):
     webview.settings['ALLOW_FILE_URLS'] = False
     bridge._window = webview.create_window(
         'V2Lens', html=html, js_api=bridge, width=980, height=720,
-        min_size=(690, 450), frameless=True, easy_drag=False, shadow=True,
+        min_size=(690, 450), resizable=True, frameless=True, easy_drag=False, shadow=True,
         background_color='#111315', text_select=True)
     bridge._window.events.closed += lambda: collector.stop.set()
     if smoke_test:

@@ -15,6 +15,15 @@
   button { cursor:pointer; }
   button:focus-visible,input:focus-visible { outline:2px solid #8e86d1; outline-offset:3px; }
   .app { display:flex; flex-direction:column; height:100%; border:1px solid var(--edge); border-radius:11px; overflow:hidden; }
+  .resize-handle { position:fixed; z-index:10000; touch-action:none; }
+  .resize-handle[data-resize="left"],.resize-handle[data-resize="right"] { top:12px; bottom:12px; width:6px; cursor:ew-resize; }
+  .resize-handle[data-resize="left"] { left:0; } .resize-handle[data-resize="right"] { right:0; }
+  .resize-handle[data-resize="top"],.resize-handle[data-resize="bottom"] { left:12px; right:12px; height:6px; cursor:ns-resize; }
+  .resize-handle[data-resize="top"] { top:0; } .resize-handle[data-resize="bottom"] { bottom:0; }
+  .resize-handle[data-resize="top-left"],.resize-handle[data-resize="top-right"],.resize-handle[data-resize="bottom-left"],.resize-handle[data-resize="bottom-right"] { width:12px; height:12px; }
+  .resize-handle[data-resize="top-left"] { top:0; left:0; cursor:nwse-resize; } .resize-handle[data-resize="top-right"] { top:0; right:0; cursor:nesw-resize; }
+  .resize-handle[data-resize="bottom-left"] { bottom:0; left:0; cursor:nesw-resize; } .resize-handle[data-resize="bottom-right"] { bottom:0; right:0; cursor:nwse-resize; }
+  body.maximized .resize-handle { display:none; }
   .titlebar { height:40px; min-height:40px; display:flex; align-items:stretch; user-select:none; }
   .drag { flex:1; display:flex; align-items:center; padding-left:23px; gap:8px; color:var(--faint); font-size:11px; letter-spacing:.3px; }
   .drag svg { width:13px; height:13px; color:#9298a3; }
@@ -31,6 +40,7 @@
   .view-tab[aria-selected="true"] { color:var(--text); }
   .connections-view,.template-view { display:flex; flex:1; flex-direction:column; min-height:0; }
   .template-view { padding-bottom:23px; }
+  .template-modes { display:flex; width:fit-content; margin-bottom:12px; }
   .template-actions { display:flex; gap:13px; align-items:center; min-width:0; }
   .template-status { font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .template-status.error { color:#d6a09c; }
@@ -116,6 +126,7 @@
 </style>
 </head>
 <body>
+<div class="resize-handle" data-resize="left" aria-hidden="true"></div><div class="resize-handle" data-resize="right" aria-hidden="true"></div><div class="resize-handle" data-resize="top" aria-hidden="true"></div><div class="resize-handle" data-resize="bottom" aria-hidden="true"></div><div class="resize-handle" data-resize="top-left" aria-hidden="true"></div><div class="resize-handle" data-resize="top-right" aria-hidden="true"></div><div class="resize-handle" data-resize="bottom-left" aria-hidden="true"></div><div class="resize-handle" data-resize="bottom-right" aria-hidden="true"></div>
 <div class="app">
   <header class="titlebar">
     <div class="drag pywebview-drag-region"><svg viewBox="0 0 256 256" fill="none" aria-hidden="true"><circle cx="108" cy="108" r="61" stroke="currentColor" stroke-width="18"/><path d="m153 153 56 56M80 90l28 38 28-38" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/></svg>V2LENS</div>
@@ -151,7 +162,7 @@
     </section>
     <footer><span id="total">Xray log · last 15 minutes</span><span><button class="traffic-enable" id="enable-traffic" title="Enable Windows traffic counters. Windows will ask for administrator permission.">Enable traffic</button><span id="traffic-status"></span></span><span id="updated"></span></footer>
     </section>
-    <section class="template-view" id="template-view" role="tabpanel" aria-labelledby="template-tab" hidden><div class="template-editor" id="template-editor"></div></section>
+    <section class="template-view" id="template-view" role="tabpanel" aria-labelledby="template-tab" hidden><div class="template-modes segments" role="group" aria-label="Template mode" title="Select which template to edit; this does not toggle TUN in v2rayN"><button data-template-mode="tun" aria-pressed="true">TUN</button><button data-template-mode="standard" aria-pressed="false">Without TUN</button></div><div class="template-editor" id="template-editor"></div></section>
   </main>
 </div>
 <!-- JSON_EDITOR_BUNDLE -->
@@ -162,6 +173,8 @@ let records=[], route='all', busy=false, sortField='app', sortDirection='asc', r
 let activeView='connections',templateLoaded=false,templateDirty=false,templateBusy=false,templateRevision='',templateOriginal='',templateEnabled=true;
 let templateEditor=null;
 let templateFoldPaths=null,templateStateWrite=Promise.resolve();
+let templateMode='tun';
+const templateDrafts=new Map();
 const nodes=new Map();
 const expandedApps=new Set();
 let rootOrder=[];
@@ -173,7 +186,33 @@ function templateStatus(message,error=false) {
   $('template-status').textContent=message;$('template-status').title=message;
   $('template-status').className='template-status'+(error?' error':'');
 }
-function templateIdleStatus() { return templateEnabled?'':'Template disabled in v2rayN'; }
+function templateIdleStatus() { return !templateEnabled?'Template disabled in v2rayN':templateLoaded && !templateOriginal.trim()?'Empty template · v2rayN defaults':''; }
+function hasTemplateDrafts() { return templateDirty || [...templateDrafts.entries()].some(([mode,draft])=>mode!==templateMode && draft.dirty); }
+function updateTemplateControls() {
+  $('save-template').disabled=templateBusy || !templateLoaded || !templateDirty;
+  $('format-template').disabled=templateBusy || !templateLoaded;
+  $('expand-template').disabled=templateBusy || !templateLoaded;
+  for(const button of document.querySelectorAll('[data-template-mode]')) {
+    button.disabled=templateBusy;button.setAttribute('aria-pressed',String(button.dataset.templateMode===templateMode));
+  }
+}
+function switchTemplateMode(mode) {
+  if(templateBusy || mode===templateMode || !['tun','standard'].includes(mode))return;
+  if(templateEditor)templateDrafts.set(templateMode,{state:templateEditor.captureState(),loaded:templateLoaded,dirty:templateDirty,
+    revision:templateRevision,original:templateOriginal,enabled:templateEnabled,folds:templateFoldPaths,
+    status:$('template-status').textContent,error:$('template-status').classList.contains('error'),conflict:!$('reload-template').hidden});
+  templateMode=mode;
+  const draft=templateDrafts.get(mode);
+  if(draft) {
+    templateLoaded=draft.loaded;templateDirty=draft.dirty;templateRevision=draft.revision;templateOriginal=draft.original;
+    templateEnabled=draft.enabled;templateFoldPaths=draft.folds;getTemplateEditor().restoreState(draft.state);
+    $('reload-template').hidden=!draft.conflict;templateStatus(draft.status,draft.error);updateTemplateControls();
+  }else {
+    templateLoaded=false;templateDirty=false;templateRevision='';templateOriginal='';templateFoldPaths=null;templateEnabled=true;
+    getTemplateEditor().setValue('');$('reload-template').hidden=true;loadTemplate();
+  }
+  templateEditor.refresh();
+}
 function getTemplateEditor() {
   if(!templateEditor)templateEditor=window.XrayJsonEditor.create($('template-editor'),{
     onChange:()=>{
@@ -182,8 +221,9 @@ function getTemplateEditor() {
     },
     onSave:saveTemplate,
     onFoldsChange:folds=>{
+      const mode=templateMode;
       templateFoldPaths=folds;
-      templateStateWrite=templateStateWrite.catch(()=>{}).then(()=>window.pywebview.api.set_editor_state({folds}));
+      templateStateWrite=templateStateWrite.catch(()=>{}).then(()=>window.pywebview.api.set_editor_state({folds},mode));
       templateStateWrite.catch(()=>templateStatus('Unable to save collapsed blocks',true));
     },
     onError:message=>templateStatus(message,true)
@@ -194,14 +234,15 @@ async function loadTemplate() {
   if(templateBusy)return;
   const editor=getTemplateEditor();
   templateBusy=true;editor.setReadOnly(true);$('save-template').disabled=true;$('format-template').disabled=true;$('expand-template').disabled=true;templateStatus('Loading…');
+  updateTemplateControls();
   try {
-    const value=await window.pywebview.api.get_template();
+    const value=await window.pywebview.api.get_template(templateMode);
     if(!value.ok)throw new Error(value.error);
-    if(templateFoldPaths===null)templateFoldPaths=(await window.pywebview.api.get_editor_state()).folds;
+    if(templateFoldPaths===null)templateFoldPaths=(await window.pywebview.api.get_editor_state(templateMode)).folds;
     editor.setValue(value.text,{folds:templateFoldPaths});templateOriginal=value.text;templateRevision=value.revision;templateEnabled=value.enabled;
     templateLoaded=true;templateDirty=false;$('reload-template').hidden=true;templateStatus(templateIdleStatus());
   }catch(error){templateStatus(error.message||'Unable to load template',true);}
-  finally{templateBusy=false;editor.setReadOnly(!templateLoaded);$('save-template').disabled=!templateDirty;$('format-template').disabled=!templateLoaded;$('expand-template').disabled=!templateLoaded;}
+  finally{templateBusy=false;editor.setReadOnly(!templateLoaded);updateTemplateControls();}
 }
 async function saveTemplate() {
   if(templateBusy || !templateDirty || !templateLoaded)return;
@@ -209,13 +250,16 @@ async function saveTemplate() {
   try{JSON.parse(text);}catch(error){templateStatus(error.message,true);return;}
   const autoReload=$('auto-reload').checked;
   templateBusy=true;templateEditor.setReadOnly(true);$('save-template').disabled=true;$('format-template').disabled=true;$('auto-reload').disabled=true;templateStatus(autoReload?'Checking · Saving · Reloading…':'Checking with Xray…');
+  updateTemplateControls();
   try {
-    const value=await window.pywebview.api.save_template(text,templateRevision,autoReload);
+    const value=await window.pywebview.api.save_template(text,templateRevision,autoReload,templateMode);
     if(!value.ok){if(value.conflict)$('reload-template').hidden=false;throw new Error(value.error);}
     templateRevision=value.revision;templateOriginal=text;templateEnabled=value.enabled;templateDirty=false;
+    templateDrafts.delete(templateMode);
     templateStatus(value.reload_error?'Saved · '+value.reload_error:!templateEnabled?'Saved · Template disabled in v2rayN':value.reloaded?'Saved · v2rayN reloaded':'Saved · Reload v2rayN to apply',!!value.reload_error);
+    if(value.applies_when)templateStatus('Saved · Applies when TUN is '+(value.applies_when==='tun'?'on':'off'));
   }catch(error){templateStatus(error.message||'Unable to save template',true);}
-  finally{templateBusy=false;templateEditor.setReadOnly(false);$('save-template').disabled=!templateDirty;$('format-template').disabled=false;$('auto-reload').disabled=false;}
+  finally{templateBusy=false;templateEditor.setReadOnly(false);$('auto-reload').disabled=false;updateTemplateControls();}
 }
 function switchView(view) {
   activeView=view;const editing=view==='template';
@@ -520,6 +564,7 @@ $('view-tabs').addEventListener('keydown',e=>{
 $('format-template').addEventListener('click',()=>{if(templateEditor && !templateBusy){templateEditor.format();templateEditor.focus();}});
 $('expand-template').addEventListener('click',()=>{if(templateEditor && !templateBusy)templateEditor.expandAll();});
 $('save-template').addEventListener('click',saveTemplate);
+for(const button of document.querySelectorAll('[data-template-mode]'))button.addEventListener('click',()=>switchTemplateMode(button.dataset.templateMode));
 $('auto-reload').addEventListener('change',()=>{
   templateStateWrite=templateStateWrite.catch(()=>{}).then(()=>window.pywebview.api.set_auto_reload($('auto-reload').checked));
   templateStateWrite.catch(()=>templateStatus('Unable to save auto-reload preference',true));
@@ -532,11 +577,16 @@ document.addEventListener('keydown',e=>{
   if(e.ctrlKey&&e.key.toLowerCase()==='f'){e.preventDefault();$('search').focus();}
   if(e.key==='Escape'){$('search').value='';render();}
 });
+for(const handle of document.querySelectorAll('[data-resize]'))handle.addEventListener('pointerdown',e=>{
+  if(e.button!==0 || !window.pywebview?.api)return;
+  e.preventDefault();window.pywebview.api.begin_resize(handle.dataset.resize);
+});
+async function toggleMaximize() { document.body.classList.toggle('maximized',await window.pywebview.api.maximize()); }
 window.addEventListener('pywebviewready',async()=>{
   $('minimize').onclick=()=>window.pywebview.api.minimize();
-  $('maximize').onclick=()=>window.pywebview.api.maximize();
-  $('close').onclick=async()=>{if(!templateDirty || window.confirm('Discard unsaved template changes?')){await templateStateWrite.catch(()=>{});window.pywebview.api.close();}};
-  document.querySelector('.drag').ondblclick=()=>window.pywebview.api.maximize();
+  $('maximize').onclick=toggleMaximize;
+  $('close').onclick=async()=>{if(!hasTemplateDrafts() || window.confirm('Discard unsaved template changes?')){await templateStateWrite.catch(()=>{});window.pywebview.api.close();}};
+  document.querySelector('.drag').ondblclick=toggleMaximize;
   try {
     const preferences=await window.pywebview.api.get_preferences();$('hide-unknown').checked=preferences.hide_unknown===true;
     $('group-app').checked=preferences.group_by_app===true;

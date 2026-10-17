@@ -36,6 +36,7 @@ jobs:
           npm run build --prefix frontend
           node frontend/test.mjs
           node frontend/connections.test.mjs
+          node frontend/modes.test.mjs
       - name: Test Python
         run: python -m unittest discover -s tests -p "test_*.py"
       - name: Check release version

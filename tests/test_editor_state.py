@@ -27,6 +27,15 @@ class EditorStateTests(unittest.TestCase):
             first.set_editor_state({'folds': []})
             self.assertEqual(self.bridge(state).get_editor_state(), {'folds': []})
 
+    def test_each_mode_keeps_its_own_folds_and_legacy_tun_state(self):
+        with tempfile.TemporaryDirectory() as folder:
+            bridge=self.bridge(Path(folder))
+            tun={'folds':[['routing']]};plain={'folds':[['inbounds']]}
+            bridge.set_editor_state(tun,'tun')
+            bridge.set_editor_state(plain,'standard')
+            self.assertEqual(bridge.get_editor_state(),tun)
+            self.assertEqual(self.bridge(Path(folder)).get_editor_state('standard'),plain)
+
     def test_corrupt_state_and_invalid_paths(self):
         with tempfile.TemporaryDirectory() as folder:
             state = Path(folder)

@@ -4,6 +4,8 @@ from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 
 from v2lens.template_editor import TemplateConflict, TemplateError, TemplateStore
 
@@ -83,6 +85,52 @@ class TemplateStoreTests(unittest.TestCase):
             connection.execute('UPDATE FullConfigTemplateItem SET Enabled=0')
         loaded = self.store.load()
         self.assertFalse(self.store.save(self.original + '\n', loaded['revision'])['enabled'])
+
+    def test_modes_save_independently_and_have_separate_revisions(self):
+        tun=self.store.load('tun')
+        standard=self.store.load('standard')
+        text=json.dumps({'inbounds':[{'tag':'socks','protocol':'socks','port':2081}]})
+        result=self.store.save(text,standard['revision'],'standard')
+        self.assertEqual(self.store.load('standard')['text'],text)
+        self.assertEqual(self.store.load('tun'),tun)
+        self.assertEqual(result['mode'],'standard')
+        self.store.save(self.original+'\n',tun['revision'],'tun')
+        self.assertEqual(self.store.load('standard')['revision'],result['revision'])
+
+    def test_wrong_mode_or_mode_token_never_overwrites_a_template(self):
+        tun=self.store.load('tun')
+        standard=self.store.load('standard')
+        with self.assertRaises(TemplateError):self.store.save(self.original,standard['revision'],'standard')
+        plain='{"inbounds":[{"tag":"socks","protocol":"socks","port":2081}]}'
+        with self.assertRaises(TemplateConflict):self.store.save(plain,tun['revision'],'standard')
+        with self.assertRaises(TemplateError):self.store.save(plain,tun['revision'],'bad-column')
+        self.assertEqual(self.store.load('tun'),tun)
+        self.assertEqual(self.store.load('standard'),standard)
+
+    def test_standard_template_native_validation_while_tun_is_running(self):
+        (self.root/'binConfigs').mkdir()
+        runtime={'inbounds':[{'tag':'tun','protocol':'tun'}], 'outbounds':[
+            {'tag':'proxy','protocol':'socks','settings':{'servers':[{'address':'127.0.0.1','port':1080}]}},
+            {'tag':'old-tun-extra','protocol':'blackhole'}]}
+        (self.root/'binConfigs/config.json').write_text(json.dumps(runtime))
+        old=json.loads(self.original);old['outbounds']=[{'tag':'old-tun-extra','protocol':'blackhole'}]
+        self.external_change(json.dumps(old))
+        plain={'inbounds':[{'tag':'socks','protocol':'socks','port':2081}]}
+        candidates=[]
+        def native_check(args,**kwargs):
+            candidates.append(json.loads(Path(args[-1]).read_text()))
+            return SimpleNamespace(returncode=0,stdout=b'',stderr=b'')
+        self.store._validator=self.store._validate_core
+        with patch('v2lens.template_editor.subprocess.run',side_effect=native_check):
+            self.store.save(json.dumps(plain),self.store.load('standard')['revision'],'standard')
+        self.assertEqual(candidates[0]['inbounds'],plain['inbounds'])
+        self.assertEqual([item['tag'] for item in candidates[0]['outbounds']],['proxy'])
+
+    def test_empty_template_loads_without_changing_the_other_mode(self):
+        with closing(self.store._connect(writable=True)) as connection,connection:
+            connection.execute('UPDATE FullConfigTemplateItem SET Config=NULL')
+        self.assertEqual(self.store.load('standard')['text'],'')
+        self.assertEqual(self.store.load('tun')['text'],self.original)
 
 
 if __name__ == '__main__':

@@ -1,4 +1,4 @@
-"""Read and validate the native v2rayN full TUN template."""
+"""Read and validate the two independent native v2rayN Xray templates."""
 from contextlib import closing
 import copy
 import hashlib
@@ -20,6 +20,14 @@ class TemplateConflict(TemplateError):
 
 
 class TemplateStore:
+    FIELDS = {'tun': 'TunConfig', 'standard': 'Config'}
+
+    @classmethod
+    def field(cls, mode):
+        if mode not in cls.FIELDS:
+            raise TemplateError('Unknown template mode.')
+        return cls.FIELDS[mode]
+
     def __init__(self, client, validator=None):
         self.client = Path(client)
         self.database = self.client / 'guiConfigs/guiNDB.db'
@@ -33,22 +41,36 @@ class TemplateStore:
 
     @staticmethod
     def _read(connection):
-        rows = connection.execute('SELECT Id, Enabled, TunConfig, AddProxyOnly, ProxyDetour FROM FullConfigTemplateItem WHERE CoreType=2').fetchall()
+        rows = connection.execute('SELECT Id, Enabled, Config, TunConfig, AddProxyOnly, ProxyDetour FROM FullConfigTemplateItem WHERE CoreType=2').fetchall()
         if len(rows) != 1:
             raise TemplateError('The Xray template could not be identified. Open Full Config Template Setting in v2rayN first.')
         return dict(rows[0])
 
-    @staticmethod
-    def _revision(row):
-        return hashlib.sha256(json.dumps(row, sort_keys=True).encode('utf-8')).hexdigest()
+    @classmethod
+    def _revision(cls, row, mode='tun'):
+        value = {key:row[key] for key in ['Id','Enabled','AddProxyOnly','ProxyDetour',cls.field(mode)]}
+        value['mode'] = mode
+        return hashlib.sha256(json.dumps(value, sort_keys=True).encode('utf-8')).hexdigest()
 
-    def load(self):
+    def active_mode(self):
+        try:
+            runtime = json.loads((self.client/'binConfigs/config.json').read_text(encoding='utf-8-sig'))
+            return self._runtime_mode(runtime)
+        except (OSError, ValueError, TypeError):
+            return None
+
+    @staticmethod
+    def _runtime_mode(runtime):
+        return 'tun' if any(item.get('protocol')=='tun' for item in runtime.get('inbounds',[]) if isinstance(item,dict)) else 'standard'
+
+    def load(self, mode='tun'):
+        field = self.field(mode)
         with closing(self._connect()) as connection:
             row = self._read(connection)
-        return {'text': row['TunConfig'] or '', 'revision': self._revision(row), 'enabled': bool(row['Enabled'])}
+        return {'text': row[field] or '', 'revision': self._revision(row,mode), 'enabled': bool(row['Enabled']), 'mode':mode}
 
     @staticmethod
-    def _parse(text):
+    def _parse(text, mode='tun'):
         if not isinstance(text, str) or len(text.encode('utf-8')) > 2 * 1024 * 1024:
             raise TemplateError('Expected a JSON template smaller than 2 MB.')
         try:
@@ -60,8 +82,13 @@ class TemplateStore:
         if not isinstance(template, dict):
             raise TemplateError('The template must be a JSON object.')
         inbounds = template.get('inbounds')
-        if not isinstance(inbounds, list) or not any(isinstance(item, dict) and item.get('protocol') == 'tun' and item.get('tag') == 'tun' for item in inbounds):
+        if mode == 'tun' and (not isinstance(inbounds, list) or not any(isinstance(item, dict) and item.get('protocol') == 'tun' and item.get('tag') == 'tun' for item in inbounds)):
             raise TemplateError('The TUN template must contain an inbound tagged "tun" with protocol "tun".')
+        if mode == 'standard':
+            if not isinstance(inbounds,list) or not inbounds:
+                raise TemplateError('The Without TUN template must contain at least one inbound.')
+            if any(isinstance(item,dict) and item.get('protocol')=='tun' for item in inbounds):
+                raise TemplateError('A Without TUN template cannot contain a TUN inbound.')
         return template
 
     def _validate_core(self, template, row):
@@ -70,7 +97,7 @@ class TemplateStore:
         except (OSError, ValueError) as error:
             raise TemplateError('Start v2rayN once before saving this template.') from error
         try:
-            previous = json.loads(row['TunConfig'] or '{}')
+            previous = json.loads(row[self.field(self._runtime_mode(runtime))] or '{}')
         except ValueError:
             previous = {}
         if not isinstance(previous, dict):
@@ -103,20 +130,21 @@ class TemplateStore:
             reason = next((line for line in reversed(details) if 'Failed to start:' in line), details[-1] if details else 'Invalid configuration')
             raise TemplateError(reason.replace('Failed to start: ', '', 1))
 
-    def save(self, text, revision):
-        template = self._parse(text)
+    def save(self, text, revision, mode='tun'):
+        field = self.field(mode)
+        template = self._parse(text,mode)
         with self._lock:
             with closing(self._connect()) as connection:
                 row = self._read(connection)
-            if self._revision(row) != revision:
+            if self._revision(row,mode) != revision:
                 raise TemplateConflict('The template changed in v2rayN. Your edits have been kept. Load the latest version before saving.')
             self._validator(template, row)
             with closing(self._connect(writable=True)) as connection:
                 with connection:
                     connection.execute('BEGIN IMMEDIATE')
                     current = self._read(connection)
-                    if self._revision(current) != revision:
+                    if self._revision(current,mode) != revision:
                         raise TemplateConflict('The template changed while checking. Your edits have been kept. Load the latest version before saving.')
-                    connection.execute('UPDATE FullConfigTemplateItem SET TunConfig=? WHERE Id=? AND CoreType=2', (text, row['Id']))
-                    current['TunConfig'] = text
-            return {'revision': self._revision(current), 'enabled': bool(current['Enabled'])}
+                    connection.execute(f'UPDATE FullConfigTemplateItem SET {field}=? WHERE Id=? AND CoreType=2', (text, row['Id']))
+                    current[field] = text
+            return {'revision': self._revision(current,mode), 'enabled': bool(current['Enabled']), 'mode':mode}
