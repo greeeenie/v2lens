@@ -1,7 +1,7 @@
 import {Compartment,EditorState,Transaction} from '@codemirror/state';
 import {Decoration,EditorView,ViewPlugin,WidgetType,drawSelection,highlightActiveLine,highlightActiveLineGutter,keymap,lineNumbers} from '@codemirror/view';
 import {defaultKeymap,history,historyKeymap,indentWithTab} from '@codemirror/commands';
-import {HighlightStyle,bracketMatching,foldEffect,foldGutter,foldInside,foldKeymap,foldedRanges,indentOnInput,indentUnit,syntaxHighlighting,unfoldAll,unfoldEffect} from '@codemirror/language';
+import {HighlightStyle,bracketMatching,codeFolding,foldEffect,foldGutter,foldInside,foldKeymap,foldedRanges,indentOnInput,indentUnit,syntaxHighlighting,unfoldAll,unfoldEffect} from '@codemirror/language';
 import {json,jsonParseLinter} from '@codemirror/lang-json';
 import {linter} from '@codemirror/lint';
 import {searchKeymap} from '@codemirror/search';
@@ -44,7 +44,7 @@ const theme=EditorView.theme({
   '.cm-foldGutter .cm-gutterElement':{cursor:'pointer',color:'#858391',padding:'0 3px'},
   '.cm-addValue':{display:'inline-block',width:'18px',height:'18px',marginLeft:'8px',padding:'0',border:'0',borderRadius:'4px',background:'transparent',color:'#858391',font:'15px/18px "Segoe UI",sans-serif',verticalAlign:'middle',cursor:'pointer'},
   '.cm-addValue:hover,.cm-addValue:focus-visible':{background:'#b2aafa19',color:'#ded7ee'},
-  '.cm-foldPlaceholder':{backgroundColor:'#252831',border:'none',borderRadius:'4px',color:'#a89abd',padding:'0 5px'},
+  '.cm-foldPlaceholder':{backgroundColor:'#252831',border:'none',borderRadius:'4px',color:'#a89abd',padding:'0 5px',cursor:'pointer'},
   '&.cm-focused .cm-selectionBackground,.cm-selectionBackground,::selection':{backgroundColor:'#63577f55 !important'},
   '.cm-cursor,.cm-dropCursor':{borderLeftColor:'#d8d0eb'},
   '.cm-matchingBracket':{backgroundColor:'#b2aafa19',outline:'1px solid #8e86d14d',borderRadius:'2px'},
@@ -111,17 +111,29 @@ export function create(parent,{onChange,onSave,onError,onFoldsChange=()=>{}}) {
   const addButton=ViewPlugin.fromClass(class {
     constructor(view){this.decorations=this.build(view);}
     update(update){
-      if(update.docChanged || update.selectionSet || update.transactions.some(tr=>tr.reconfigured))
+      if(update.docChanged || update.selectionSet || update.transactions.some(tr=>tr.reconfigured || tr.effects.some(effect=>effect.is(foldEffect) || effect.is(unfoldEffect))))
         this.decorations=this.build(update.view);
     }
     build(view){
       if(view.state.readOnly)return Decoration.none;
-      const position=view.state.doc.lineAt(view.state.selection.main.head).to;
+      const line=view.state.doc.lineAt(view.state.selection.main.head),position=line.to;
+      let collapsed=false;
+      foldedRanges(view.state).between(line.from,position,(from,to)=>{if(from<=position && position<=to)collapsed=true;});
+      if(collapsed)return Decoration.none;
       return Decoration.set([Decoration.widget({widget:new AddValueButton(position,addValue),side:1}).range(position)]);
     }
   },{decorations:plugin=>plugin.decorations});
   const extensions=()=>[
-    lineNumbers(),foldGutter(),addButton,highlightActiveLineGutter(),history(),drawSelection(),
+    lineNumbers(),foldGutter(),codeFolding({placeholderDOM:(view,onUnfold)=>{
+      const placeholder=document.createElement('span');
+      placeholder.className='cm-foldPlaceholder';placeholder.textContent='…';placeholder.contentEditable='false';
+      placeholder.setAttribute('role','button');placeholder.setAttribute('aria-label','Expand folded block');placeholder.tabIndex=0;placeholder.title='Expand block';
+      // Keep native selection changes from moving the inline + before click fires.
+      placeholder.onmousedown=event=>{event.preventDefault();event.stopPropagation();};
+      placeholder.onclick=event=>{event.stopPropagation();onUnfold(event);};
+      placeholder.onkeydown=event=>{if(event.key==='Enter' || event.key===' '){event.stopPropagation();onUnfold(event);}};
+      return placeholder;
+    }}),addButton,highlightActiveLineGutter(),history(),drawSelection(),
     json(),syntaxHighlighting(colors),indentOnInput(),indentUnit.of('  '),bracketMatching(),
     closeBrackets(),highlightActiveLine(),linter(jsonParseLinter(),{delay:350}),theme,
     mode.of([EditorState.readOnly.of(readOnly),EditorView.editable.of(!readOnly)]),

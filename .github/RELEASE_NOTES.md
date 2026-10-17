@@ -1,13 +1,11 @@
-**TUN / Without TUN** теперь редактируются отдельно: каждый шаблон сохраняется в своё поле v2rayN и проверяется штатным Xray. Переключение сохраняет черновик, отмену изменений и свёрнутые блоки каждого режима. Пустой шаблон остаётся пустым — используются настройки v2rayN по умолчанию.
+Исправлен клик по **`…` внутри свёрнутого JSON-блока**: блок раскрывается с первого раза, каретка остаётся на месте, текст не меняется. Кнопка **+** не появляется поверх свёрнутого заголовка. Раскрытие работает также через Enter и пробел.
 
-Окно можно менять за края и углы. **Auto-reload v2rayN** перезагружает только текущий режим; сохранение второго шаблона не включает и не выключает TUN.
+Убрана надпись **Empty template · v2rayN defaults**. Пустые шаблоны продолжают использовать настройки v2rayN по умолчанию.
 
-**Установка / обновление:** положите `V2Lens.exe` рядом с `v2rayN.exe`, заменив предыдущую версию после её закрытия. Папку `V2Lens-data` оставьте для сохранения настроек. Python и Node.js не нужны.
-
-Windows 10/11 x64, WebView2 Runtime. Проверено с v2rayN 7.25.6 / Xray 26.9.9. EXE запрашивает права администратора. Для Connections нужна запись access-журнала Xray в файл. Контрольные суммы — в `SHA256SUMS.txt`; инструкции и лицензии — в ZIP.
+**Обновление:** замените `V2Lens.exe` рядом с `v2rayN.exe`, сохранив папку `V2Lens-data`. Windows 10/11 x64, WebView2 Runtime. Python и Node.js для готового EXE не нужны.
 
 ---
 
-Separate **TUN / Without TUN** templates with independent Xray validation, saves, drafts, undo and persistent folds. The window now resizes from every edge and corner. Auto-reload affects only the active mode; selecting a template does not toggle TUN.
+Fixed folded JSON placeholders: clicking **…** expands the block on the first click without moving the editing caret or changing the document. The **+** button stays hidden on folded headers. Keyboard expansion is supported. Removed the empty-template status message.
 
-Place `V2Lens.exe` beside `v2rayN.exe`. When upgrading, close the old version and replace the EXE; keep `V2Lens-data`. Windows 10/11 x64 and WebView2 are required. No Python or Node.js installation needed.
+Replace `V2Lens.exe` beside `v2rayN.exe` and keep `V2Lens-data`.

@@ -186,7 +186,7 @@ function templateStatus(message,error=false) {
   $('template-status').textContent=message;$('template-status').title=message;
   $('template-status').className='template-status'+(error?' error':'');
 }
-function templateIdleStatus() { return !templateEnabled?'Template disabled in v2rayN':templateLoaded && !templateOriginal.trim()?'Empty template · v2rayN defaults':''; }
+function templateIdleStatus() { return !templateEnabled?'Template disabled in v2rayN':''; }
 function hasTemplateDrafts() { return templateDirty || [...templateDrafts.entries()].some(([mode,draft])=>mode!==templateMode && draft.dirty); }
 function updateTemplateControls() {
   $('save-template').disabled=templateBusy || !templateLoaded || !templateDirty;

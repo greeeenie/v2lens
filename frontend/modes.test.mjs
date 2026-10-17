@@ -35,7 +35,7 @@ try {
   await page.getByRole('button',{name:'Without TUN',exact:true}).click();
   await page.waitForFunction(()=>templateLoaded&&!templateBusy);
   assert.equal(await page.evaluate(()=>getTemplateEditor().getValue()),'','An empty standard template stays empty');
-  assert.match(await page.locator('#template-status').textContent(),/Empty template/);
+  assert.equal(await page.locator('#template-status').textContent(),'','An empty template has no idle status text');
   assert.equal(await page.evaluate(()=>hasTemplateDrafts()),true,'An inactive TUN draft is still unsaved');
   await page.locator('#close').click();
   assert.equal(await page.evaluate(()=>window.prompts),1,'Closing warns about an inactive draft');
