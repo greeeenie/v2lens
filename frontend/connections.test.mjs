@@ -66,12 +66,22 @@ try {
     records=[{...input[0],app:'First.exe',time:2},{...input[1],app:'Second.exe',time:1}];
     sortField='time';sortDirection='desc';render();
     records[1].time=3;render(true);
-    return [...document.querySelectorAll('.row')].map(row=>row.getAnimations().map(animation=>({duration:animation.effect.getTiming().duration,frames:animation.effect.getKeyframes()})));
+    return [...document.querySelectorAll('.row')].map(row=>row.getAnimations().map(animation=>({duration:animation.effect.getTiming().duration,easing:animation.effect.getTiming().easing,frames:animation.effect.getKeyframes()})));
   },context.input);
   assert.ok(moves.every(animations=>animations.length===1&&animations[0].duration===150),'Both displaced rows animate for 150 ms');
   assert.ok(moves[0][0].frames[0].transform.startsWith('translateY(44'),'Promoted row starts at its previous lower position');
   assert.ok(moves[1][0].frames[0].transform.startsWith('translateY(-44'),'Displaced row starts at its previous higher position');
   assert.ok(moves.every(([animation])=>!Object.hasOwn(animation.frames[0],'opacity')),'Reordering moves existing rows without fading them');
+  assert.ok(moves.every(([animation])=>animation.easing==='ease-in-out'),'Rows accelerate and decelerate smoothly together');
+  assert.equal(moves[0][0].frames[0].zIndex,'2','The rising row stays above its displaced neighbors');
+  assert.equal(moves[1][0].frames[0].zIndex,'1','Displaced neighbors slide beneath the rising row');
+  const visibleRise=await motion.evaluate(()=>{
+    const [rising,displaced]=document.querySelectorAll('.row');
+    for(const row of [rising,displaced])for(const animation of row.getAnimations()){animation.pause();animation.currentTime=75;}
+    const rect=rising.getBoundingClientRect(),neighbor=displaced.getBoundingClientRect();
+    return {visible:document.elementFromPoint(rect.left+20,rect.top+rect.height/2)?.closest('.row')===rising,overlap:Math.abs(rect.top-neighbor.top)<1};
+  });
+  assert.ok(visibleRise.overlap&&visibleRise.visible,'The rising row remains visible while crossing its displaced neighbor halfway through the animation');
   const interrupted=await motion.evaluate(()=>{
     records[0].time=4;render(true);
     return [...document.querySelectorAll('.row')].map(row=>row.getAnimations().length);
