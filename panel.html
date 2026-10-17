@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:; connect-src http://127.0.0.1:*">
+<title>V2Lens</title>
+<style>
+  :root { color-scheme:dark; --bg:#111315; --surface:#191c20; --edge:#282c31; --text:#e8e9ec; --muted:#858b94; --faint:#5d646e; --proxy:#b2aafa; --direct:#86c9ac; }
+  * { box-sizing:border-box; }
+  html,body { width:100%; height:100%; margin:0; overflow:hidden; }
+  body { color:var(--text); background:var(--bg); font-family:"Segoe UI Variable","Segoe UI",sans-serif; font-size:13px; -webkit-font-smoothing:antialiased; }
+  button,input { font:inherit; }
+  [hidden] { display:none!important; }
+  button { cursor:pointer; }
+  button:focus-visible,input:focus-visible { outline:2px solid #8e86d1; outline-offset:3px; }
+  .app { display:flex; flex-direction:column; height:100%; border:1px solid var(--edge); border-radius:11px; overflow:hidden; }
+  .titlebar { height:40px; min-height:40px; display:flex; align-items:stretch; user-select:none; }
+  .drag { flex:1; display:flex; align-items:center; padding-left:23px; gap:8px; color:var(--faint); font-size:11px; letter-spacing:.3px; }
+  .drag svg { width:13px; height:13px; color:#9298a3; }
+  .window-controls { display:flex; padding:4px 5px 0 0; gap:2px; }
+  .window-controls button { border:0; background:transparent; width:35px; height:29px; border-radius:7px; color:var(--muted); display:grid; place-items:center; }
+  .window-controls button:hover { background:#24282e; color:var(--text); }
+  .window-controls .close:hover { background:#8b3743; color:white; }
+  .window-controls svg { width:12px; height:12px; pointer-events:none; }
+  main { display:flex; flex:1; flex-direction:column; min-height:0; padding:14px 29px 0; }
+  .heading { display:flex; align-items:center; justify-content:space-between; gap:15px; margin-bottom:23px; }
+  .view-tabs { display:flex; align-items:center; gap:23px; flex-shrink:0; }
+  .view-tab { padding:0 0 7px; background:none; border:0; color:var(--faint); font-size:20px; font-weight:600; letter-spacing:-.5px; }
+  .view-tab:hover { color:var(--muted); }
+  .view-tab[aria-selected="true"] { color:var(--text); }
+  .connections-view,.template-view { display:flex; flex:1; flex-direction:column; min-height:0; }
+  .template-view { padding-bottom:23px; }
+  .template-actions { display:flex; gap:13px; align-items:center; min-width:0; }
+  .template-status { font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .template-status.error { color:#d6a09c; }
+  .template-status:empty { display:none; }
+  .template-reload { border:0; padding:0; background:none; color:var(--proxy); font-size:11px; white-space:nowrap; }
+  .template-save { border:1px solid #504762; border-radius:8px; background:#312b41; color:#e4dcfa; padding:7px 16px; flex-shrink:0; }
+  .template-save:hover:not(:disabled) { background:#413750; }
+  .template-save:disabled { opacity:.4; cursor:default; }
+  .template-editor { display:block; flex:1; width:100%; min-height:0; overflow:hidden; border:1px solid var(--edge); border-radius:9px; background:#15181b; }
+  .template-editor:focus-within { border-color:#524c64; }
+  .template-format { border:0; padding:6px 0; background:none; color:var(--muted); font-size:11px; white-space:nowrap; flex-shrink:0; }
+  .template-format:hover { color:var(--text); }
+  .template-format:disabled { opacity:.4; cursor:default; }
+  h1 { font-size:24px; font-weight:600; letter-spacing:-.7px; margin:0; }
+  .view-options { display:flex; align-items:center; gap:18px; flex-wrap:wrap; justify-content:flex-end; }
+  .toggle { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:11px; cursor:pointer; user-select:none; white-space:nowrap; }
+  .toggle input { appearance:none; position:relative; width:13px; height:13px; margin:0; background:var(--surface); border:1px solid #454b56; border-radius:4px; cursor:pointer; }
+  .toggle input:checked { background:#4c426f; border-color:#9182c4; }
+  .toggle input:checked::after { content:""; position:absolute; left:4px; top:1px; width:3px; height:6px; border:solid #eeeafa; border-width:0 1.5px 1.5px 0; transform:rotate(45deg); }
+  .tools { display:flex; align-items:center; gap:16px; margin-bottom:22px; }
+  .search { display:flex; align-items:center; gap:10px; flex:1; height:38px; background:var(--surface); border:1px solid var(--edge); border-radius:10px; padding:0 12px; }
+  .search:focus-within { border-color:#686283; }
+  .search svg { width:15px; height:15px; color:#707882; flex-shrink:0; }
+  .search input { width:100%; min-width:0; padding:0; border:0; outline:none; box-shadow:none; color:var(--text); background:transparent; font-size:12px; }
+  .search input::placeholder { color:#737a85; }
+  .search input:focus-visible { outline:none; }
+  .segments { display:flex; align-items:center; gap:3px; padding:3px; border-radius:10px; background:#191c20; border:1px solid #24282e; white-space:nowrap; }
+  .segments button { height:29px; padding:0 13px; color:var(--muted); background:transparent; border:0; border-radius:7px; font-size:11px; }
+  .segments button:hover { color:var(--text); }
+  .segments button[aria-pressed="true"] { color:var(--text); background:#2c3037; box-shadow:0 1px 2px #0003; }
+  .recent { display:flex; align-items:center; gap:7px; height:36px; padding:0 10px; border:1px solid transparent; border-radius:9px; background:transparent; color:var(--muted); font-size:11px; white-space:nowrap; }
+  .recent:hover { background:#20242a; color:var(--text); }
+  .recent[aria-pressed="true"] { color:var(--text); background:#23272f; border-color:#343944; }
+  .recent svg { width:13px; height:13px; }
+  .table { display:flex; flex:1; min-height:0; flex-direction:column; }
+  .columns,.row { display:grid; grid-template-columns:minmax(110px,1fr) 54px 58px minmax(130px,1.4fr) 108px 76px; gap:12px; align-items:center; }
+  .columns { padding:0 12px 11px; color:var(--faint); font-size:11px; border-bottom:1px solid var(--edge); user-select:none; }
+  .sort-heading { display:flex; align-items:center; gap:6px; padding:0; border:0; background:transparent; color:inherit; font-size:inherit; text-align:left; }
+  .sort-heading:hover { color:#bfc6d2; }
+  [aria-sort="ascending"] .sort-heading,[aria-sort="descending"] .sort-heading { color:#d7dce6; }
+  .sort-arrow { display:inline-block; min-width:8px; font-size:12px; color:#a89fda; }
+  .rows { overflow-y:auto; overflow-x:hidden; flex:1; min-height:0; scrollbar-gutter:stable; overflow-anchor:none; padding-bottom:10px; }
+  .row { min-height:44px; padding:7px 12px; border-bottom:1px solid #ffffff05; border-radius:7px; position:relative; background:var(--bg); }
+  .row:hover { background:#ffffff03; }
+  .row.expandable { cursor:pointer; }
+  .row.process-row,.row.connection-row { min-height:36px; }
+  .row.process-row { background:#15181c; }
+  .row.connection-row .app-name { font-size:10px; font-weight:400; color:var(--muted); }
+  .expander { display:grid; place-items:center; flex-shrink:0; width:12px; height:18px; padding:0; border:0; background:none; color:var(--muted); }
+  .expander[hidden] { display:none; }
+  .expander::before { content:""; width:5px; height:5px; border-right:1px solid currentColor; border-bottom:1px solid currentColor; transform:rotate(-45deg); }
+  .expander[aria-expanded="true"]::before { transform:rotate(45deg); margin-top:-3px; }
+  .application { display:flex; align-items:center; min-width:0; }
+  .app-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; line-height:16px; font-weight:500; color:#969eac; }
+  .app-info { min-width:0; }
+  .app-info .app-name { display:block; }
+  .app-info { display:flex; align-items:center; gap:8px; }
+  .source { margin-top:1px; color:var(--faint); font:10px/11px "Cascadia Code",Consolas,monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .protocol { color:var(--muted); font-size:10px; letter-spacing:.3px; }
+  .pid { color:#aab1bd; font:11px "Cascadia Code",Consolas,monospace; font-variant-numeric:tabular-nums; }
+  .unknown .app-name { color:var(--muted); font-weight:400; }
+  .target { display:flex; align-items:center; gap:8px; min-width:0; }
+  .destination { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; color:#9da5b1; font-family:"Cascadia Code",Consolas,monospace; user-select:text; }
+  .count { color:#626a76; font-size:10px; flex-shrink:0; }
+  .traffic { color:#9da5b1; font:10px "Cascadia Code",Consolas,monospace; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .traffic span { display:block; line-height:14px; }
+  .traffic.unavailable { color:var(--faint); }
+  .traffic-enable { color:#b2aafa; background:none; border:0; padding:0; font-size:10px; }
+  .traffic-enable:disabled { color:var(--faint); cursor:default; }
+  .route { display:inline-flex; align-items:center; gap:6px; width:fit-content; padding:4px 9px; border-radius:6px; font-size:10px; white-space:nowrap; color:#9299a4; background:#ffffff05; }
+  .route::before { content:""; width:4px; height:4px; border-radius:50%; background:currentColor; }
+  .route.proxy { color:var(--proxy); background:#b2aafa0b; }
+  .route.direct { color:var(--direct); background:#86c9ac0b; }
+  .route.block { color:#d6a09c; background:#d6a09c0b; }
+  .empty { display:none; color:var(--muted); padding:70px 15px; text-align:center; font-size:12px; line-height:1.8; }
+  footer { display:flex; align-items:center; justify-content:space-between; gap:15px; height:39px; min-height:39px; color:var(--faint); font-size:10px; user-select:none; }
+  ::-webkit-scrollbar { width:5px; height:5px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:#353b45; border-radius:8px; }
+  ::-webkit-scrollbar-thumb:hover { background:#525b68; }
+  @media(max-width:760px) { main { padding-left:18px; padding-right:18px; } .tools { gap:8px; } .segments button { padding:0 8px; } .columns,.row { grid-template-columns:minmax(95px,1fr) 43px 49px minmax(100px,1.2fr) 87px 63px; gap:8px; } .recent { padding:0 5px; gap:5px; } .traffic { font-size:9px; } }
+  @media(prefers-reduced-motion:no-preference) { button,.search { transition:background .12s,border-color .12s; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="titlebar">
+    <div class="drag pywebview-drag-region"><svg viewBox="0 0 256 256" fill="none" aria-hidden="true"><circle cx="108" cy="108" r="61" stroke="currentColor" stroke-width="18"/><path d="m153 153 56 56M80 90l28 38 28-38" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/></svg>V2LENS</div>
+    <div class="window-controls">
+      <button id="minimize" title="Minimize" aria-label="Minimize"><svg viewBox="0 0 12 12"><path d="M2 6h8" stroke="currentColor"/></svg></button>
+      <button id="maximize" title="Maximize" aria-label="Maximize"><svg viewBox="0 0 12 12" fill="none"><rect x="2.5" y="2.5" width="7" height="7" rx="1" stroke="currentColor"/></svg></button>
+      <button id="close" class="close" title="Close" aria-label="Close"><svg viewBox="0 0 12 12"><path d="m3 3 6 6m0-6-6 6" stroke="currentColor"/></svg></button>
+    </div>
+  </header>
+  <main>
+    <div class="heading">
+      <nav class="view-tabs" id="view-tabs" role="tablist" aria-label="View"><button class="view-tab" id="connections-tab" role="tab" aria-selected="true" aria-controls="connections-view">Connections</button><button class="view-tab" id="template-tab" role="tab" aria-selected="false" aria-controls="template-view" tabindex="-1">Template</button></nav>
+      <div class="view-options" id="connection-options"><label class="toggle"><input type="checkbox" id="group-app">Group by application</label><label class="toggle"><input type="checkbox" id="hide-unknown">Hide unknown processes</label></div>
+      <div class="template-actions" id="template-actions" hidden><span class="template-status" id="template-status" role="status" aria-live="polite"></span><button class="template-reload" id="reload-template" hidden>Load latest</button><label class="toggle" title="Reload v2rayN after saving a valid template"><input type="checkbox" id="auto-reload">Auto-reload v2rayN</label><button class="template-format" id="expand-template" disabled>Expand all</button><button class="template-format" id="format-template" disabled title="Format JSON · Ctrl+Shift+F">Format</button><button class="template-save" id="save-template" disabled title="Save template · Ctrl+S">Save</button></div>
+    </div>
+    <section class="connections-view" id="connections-view" role="tabpanel" aria-labelledby="connections-tab">
+    <div class="tools">
+      <label class="search"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" stroke-width="1.5"/><path d="m13 13 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><input id="search" aria-label="Search application or address" placeholder="Search application or address" autocomplete="off" spellcheck="false"></label>
+      <div class="segments" aria-label="Route"><button data-route="all" aria-pressed="true">All</button><button data-route="proxy" aria-pressed="false">Proxy</button><button data-route="direct" aria-pressed="false">Direct</button></div>
+      <button class="recent" id="recent" aria-pressed="false" title="Sort by latest connection activity"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.2"/><path d="M8 4.5V8l2 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>Recent</button>
+    </div>
+    <section class="table" role="table" aria-label="Connections">
+      <div class="columns" role="row">
+        <span role="columnheader" data-sort-cell="app" aria-sort="ascending"><button class="sort-heading" data-sort="app" title="Sort by application name">Application<span class="sort-arrow" aria-hidden="true">↑</span></button></span>
+        <span role="columnheader" title="Process ID recorded when the connection was identified. A dash means it is unknown.">PID</span>
+        <span role="columnheader" data-sort-cell="protocol" aria-sort="none"><button class="sort-heading" data-sort="protocol" title="Sort by protocol">Protocol<span class="sort-arrow" aria-hidden="true"></span></button></span>
+        <span role="columnheader">Destination</span>
+        <span role="columnheader" data-sort-cell="traffic" aria-sort="none"><button class="sort-heading" data-sort="traffic" title="Sort by current download and upload speed">Traffic<span class="sort-arrow" aria-hidden="true"></span></button></span>
+        <span role="columnheader" data-sort-cell="route" aria-sort="none"><button class="sort-heading" data-sort="route" title="Sort by route">Route<span class="sort-arrow" aria-hidden="true"></span></button></span>
+      </div>
+      <div class="rows" id="rows" role="rowgroup"><div id="empty" class="empty" role="status">Waiting for new connections…</div></div>
+    </section>
+    <footer><span id="total">Xray log · last 15 minutes</span><span><button class="traffic-enable" id="enable-traffic" title="Enable Windows traffic counters. Windows will ask for administrator permission.">Enable traffic</button><span id="traffic-status"></span></span><span id="updated"></span></footer>
+    </section>
+    <section class="template-view" id="template-view" role="tabpanel" aria-labelledby="template-tab" hidden><div class="template-editor" id="template-editor"></div></section>
+  </main>
+</div>
+<!-- JSON_EDITOR_BUNDLE -->
+<script>
+const $ = id => document.getElementById(id);
+const routeNames = {proxy:'Proxy',direct:'Direct',block:'Blocked'};
+let records=[], route='all', busy=false, sortField='app', sortDirection='asc', receivedSnapshot=false;
+let activeView='connections',templateLoaded=false,templateDirty=false,templateBusy=false,templateRevision='',templateOriginal='',templateEnabled=true;
+let templateEditor=null;
+let templateFoldPaths=null,templateStateWrite=Promise.resolve();
+const nodes=new Map();
+const expandedApps=new Set(),collapsedProcesses=new Set();
+let rootOrder=[];
+const targetSeen=new Map(), newTargets=new Map();
+const collator=new Intl.Collator('en',{numeric:true,sensitivity:'base'});
+const reducedMotion=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches===true;
+
+function templateStatus(message,error=false) {
+  $('template-status').textContent=message;$('template-status').title=message;
+  $('template-status').className='template-status'+(error?' error':'');
+}
+function templateIdleStatus() { return templateEnabled?'':'Template disabled in v2rayN'; }
+function getTemplateEditor() {
+  if(!templateEditor)templateEditor=window.XrayJsonEditor.create($('template-editor'),{
+    onChange:()=>{
+      templateDirty=templateEditor.getValue()!==templateOriginal;
+      $('save-template').disabled=!templateDirty || templateBusy;templateStatus(templateDirty?'Unsaved changes':templateIdleStatus());
+    },
+    onSave:saveTemplate,
+    onFoldsChange:folds=>{
+      templateFoldPaths=folds;
+      templateStateWrite=templateStateWrite.catch(()=>{}).then(()=>window.pywebview.api.set_editor_state({folds}));
+      templateStateWrite.catch(()=>templateStatus('Unable to save collapsed blocks',true));
+    },
+    onError:message=>templateStatus(message,true)
+  });
+  return templateEditor;
+}
+async function loadTemplate() {
+  if(templateBusy)return;
+  const editor=getTemplateEditor();
+  templateBusy=true;editor.setReadOnly(true);$('save-template').disabled=true;$('format-template').disabled=true;$('expand-template').disabled=true;templateStatus('Loading…');
+  try {
+    const value=await window.pywebview.api.get_template();
+    if(!value.ok)throw new Error(value.error);
+    if(templateFoldPaths===null)templateFoldPaths=(await window.pywebview.api.get_editor_state()).folds;
+    editor.setValue(value.text,{folds:templateFoldPaths});templateOriginal=value.text;templateRevision=value.revision;templateEnabled=value.enabled;
+    templateLoaded=true;templateDirty=false;$('reload-template').hidden=true;templateStatus(templateIdleStatus());
+  }catch(error){templateStatus(error.message||'Unable to load template',true);}
+  finally{templateBusy=false;editor.setReadOnly(!templateLoaded);$('save-template').disabled=!templateDirty;$('format-template').disabled=!templateLoaded;$('expand-template').disabled=!templateLoaded;}
+}
+async function saveTemplate() {
+  if(templateBusy || !templateDirty || !templateLoaded)return;
+  const text=templateEditor.getValue();
+  try{JSON.parse(text);}catch(error){templateStatus(error.message,true);return;}
+  const autoReload=$('auto-reload').checked;
+  templateBusy=true;templateEditor.setReadOnly(true);$('save-template').disabled=true;$('format-template').disabled=true;$('auto-reload').disabled=true;templateStatus(autoReload?'Checking · Saving · Reloading…':'Checking with Xray…');
+  try {
+    const value=await window.pywebview.api.save_template(text,templateRevision,autoReload);
+    if(!value.ok){if(value.conflict)$('reload-template').hidden=false;throw new Error(value.error);}
+    templateRevision=value.revision;templateOriginal=text;templateEnabled=value.enabled;templateDirty=false;
+    templateStatus(value.reload_error?'Saved · '+value.reload_error:!templateEnabled?'Saved · Template disabled in v2rayN':value.reloaded?'Saved · v2rayN reloaded':'Saved · Reload v2rayN to apply',!!value.reload_error);
+  }catch(error){templateStatus(error.message||'Unable to save template',true);}
+  finally{templateBusy=false;templateEditor.setReadOnly(false);$('save-template').disabled=!templateDirty;$('format-template').disabled=false;$('auto-reload').disabled=false;}
+}
+function switchView(view) {
+  activeView=view;const editing=view==='template';
+  $('connections-view').hidden=editing;$('template-view').hidden=!editing;
+  $('connection-options').hidden=editing;$('template-actions').hidden=!editing;
+  for(const name of ['connections','template']) {
+    $(name+'-tab').setAttribute('aria-selected',String(name===view));$(name+'-tab').tabIndex=name===view?0:-1;
+  }
+  if(editing && !templateDirty && !templateBusy)loadTemplate();
+  if(editing && templateEditor)templateEditor.refresh();
+  if(!editing)render();
+}
+
+function node(tag,cls,text) {
+  const el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=text;return el;
+}
+function knownProcess(r) {
+  return typeof r.app==='string' && Boolean(r.app.trim()) && r.app!=='Unknown process' && !/^PID\s+\d+$/i.test(r.app);
+}
+function processLabel(r) {
+  return knownProcess(r)?r.app:sourceAddress(r)||'—';
+}
+function pidLabel(r) {
+  return Number.isInteger(r.pid) && r.pid>0?String(r.pid):'—';
+}
+function sourceAddress(r) {
+  if(!r.source || !r.local_port)return '';
+  const host=r.source.includes(':')?`[${r.source}]`:r.source;
+  return `${host}:${r.local_port}`;
+}
+function sourceLabel(r) {
+  const address=sourceAddress(r);
+  return address?`Source ${address}`:'Source unavailable';
+}
+function visibleRecord(r,q,selectedRoute,hideUnknown) {
+  if(r.outbound==='dns' || r.outbound==='dns-out')return false;
+  if(hideUnknown && !knownProcess(r))return false;
+  if(selectedRoute!=='all' && r.outbound!==selectedRoute)return false;
+  return !q || `${r.app} ${r.pid||''} ${r.protocol||''} ${r.inbound||''} ${r.destination} ${r.port} ${r.source||''} ${r.local_port||''}`.toLocaleLowerCase().includes(q);
+}
+function connectionKey(r) {
+  return JSON.stringify([r.app,r.pid,r.protocol,r.destination,r.port,r.outbound,...(knownProcess(r)?[]:[r.source,r.local_port])]);
+}
+function formatBytes(value) {
+  const units=['B','KB','MB','GB'];let unit=0;
+  while(value>=1024 && unit<units.length-1){value/=1024;unit++;}
+  return `${unit?value.toFixed(value<10?1:0):Math.round(value)} ${units[unit]}`;
+}
+function trackArrivals(incoming,wallTime=Date.now()/1000,clock=performance.now()) {
+  for(const r of incoming) {
+    if(r.outbound==='dns' || r.outbound==='dns-out')continue;
+    const key=connectionKey(r);
+    const fresh=receivedSnapshot && Math.abs(wallTime-r.time)<6;
+    if(fresh && !targetSeen.has(key))newTargets.set(key,clock+3000);
+    targetSeen.set(key,r.time);
+  }
+  for(const [key,last] of targetSeen)if(wallTime-last>900)targetSeen.delete(key);
+  for(const [key,until] of newTargets)if(until<=clock)newTargets.delete(key);
+  receivedSnapshot=true;
+}
+function compareGroups(a,b,field=sortField,direction=sortDirection) {
+  const x=a.record,y=b.record,sign=direction==='desc'?-1:1;
+  let primary=0;
+  if(field==='time')primary=x.time-y.time;
+  else if(field==='traffic') {
+    const missing=Number(!x.traffic)-Number(!y.traffic);if(missing)return missing;
+    primary=(x.traffic?x.traffic.up_rate+x.traffic.down_rate:0)-(y.traffic?y.traffic.up_rate+y.traffic.down_rate:0);
+  }
+  else if(field==='protocol')primary=collator.compare(x.protocol||'',y.protocol||'');
+  else if(field==='route')primary=collator.compare(routeNames[x.outbound]||x.outbound,routeNames[y.outbound]||y.outbound);
+  else {
+    const identified=Number(!knownProcess(x))-Number(!knownProcess(y));
+    if(identified)return identified;
+    primary=collator.compare(processLabel(x),processLabel(y));
+  }
+  if(primary)return primary*sign;
+  // Stable tie-breakers keep activity updates from shuffling alphabetic groups.
+  return collator.compare(processLabel(x),processLabel(y)) || (x.pid??Infinity)-(y.pid??Infinity) ||
+    collator.compare(x.protocol||'',y.protocol||'') || collator.compare(x.outbound,y.outbound) ||
+    collator.compare(x.destination,y.destination) || x.port-y.port || collator.compare(a.key,b.key);
+}
+function updateSortIndicators() {
+  for(const cell of document.querySelectorAll('[data-sort-cell]')) {
+    const active=cell.dataset.sortCell===sortField;
+    cell.setAttribute('aria-sort',active?(sortDirection==='asc'?'ascending':'descending'):'none');
+    cell.querySelector('.sort-arrow').textContent=active?(sortDirection==='asc'?'↑':'↓'):'';
+  }
+  $('recent').setAttribute('aria-pressed',String(sortField==='time'));
+}
+function setSort(field) {
+  sortDirection=field===sortField?(sortDirection==='asc'?'desc':'asc'):field==='traffic'?'desc':'asc';
+  sortField=field;updateSortIndicators();render();saveSort();
+}
+function saveSort() {
+  if(window.pywebview?.api)window.pywebview.api.set_sort(sortField,sortDirection).catch(()=>{});
+}
+function summarizeMembers(members) {
+  const latest=members.reduce((a,b)=>a.record.time>b.record.time?a:b).record;
+  const pids=[...new Set(members.map(g=>g.record.pid).filter(p=>Number.isInteger(p)&&p>0))].sort((a,b)=>a-b);
+  const protocols=[...new Set(members.map(g=>g.record.protocol))].sort();
+  const routes=[...new Set(members.map(g=>g.record.outbound))].sort();
+  const destinations=[...new Set(members.map(g=>`${g.record.destination.includes(':')?'['+g.record.destination+']':g.record.destination}:${g.record.port}`))].sort(collator.compare);
+  const measured=members.filter(g=>g.record.traffic);
+  const traffic=measured.length?measured.reduce((sum,g)=>{
+    for(const field of ['sent','received','up_rate','down_rate'])sum[field]+=g.record.traffic[field]||0;
+    return sum;
+  },{sent:0,received:0,up_rate:0,down_rate:0}):null;
+  return {...latest,pid:pids.length===1?pids[0]:null,protocol:protocols.join('/'),outbound:routes.length===1?routes[0]:'mixed',traffic,
+    summary:{pids,protocols,routes,destinations,measured:measured.length,connections:members.length}};
+}
+function buildGroups(input,q,selectedRoute,hideUnknown,byApplication) {
+  const groups=new Map();
+  for(const r of input) {
+    if(!visibleRecord(r,q,selectedRoute,hideUnknown))continue;
+    const key=connectionKey(r);
+    if(groups.has(key)) { const g=groups.get(key);g.count++;if(r.time>g.record.time)g.record=r; }
+    else groups.set(key,{record:r,count:1,key});
+  }
+  if(!byApplication)return [...groups.values()];
+  const applications=new Map();
+  for(const group of groups.values()) {
+    if(!knownProcess(group.record)){applications.set(group.key,group);continue;}
+    const key='app:'+group.record.app.trim().toLocaleLowerCase();
+    if(!applications.has(key))applications.set(key,{key,members:[],count:0});
+    const app=applications.get(key);app.members.push(group);app.count+=group.count;
+  }
+  for(const app of applications.values()) {
+    if(!app.members)continue;
+    app.record=summarizeMembers(app.members);
+  }
+  return [...applications.values()];
+}
+function flattenGroups(roots) {
+  const shown=[];
+  for(const root of roots) {
+    shown.push({...root,depth:0});
+    if(!root.members || !expandedApps.has(root.key))continue;
+    const processes=new Map();
+    for(const member of root.members) {
+      const pid=member.record.pid||0;
+      if(!processes.has(pid))processes.set(pid,[]);
+      processes.get(pid).push(member);
+    }
+    for(const [pid,members] of [...processes].sort((a,b)=>a[0]-b[0])) {
+      const key=root.key+':pid:'+pid;
+      shown.push({key,record:summarizeMembers(members),members,count:members.reduce((sum,g)=>sum+g.count,0),depth:1});
+      if(!collapsedProcesses.has(key))for(const member of [...members].sort((a,b)=>compareGroups(a,b,'app','asc')))
+        shown.push({...member,key:key+':connection:'+member.key,depth:2});
+    }
+  }
+  return shown;
+}
+function toggleGroup(key,depth) {
+  const set=depth===0?expandedApps:collapsedProcesses;
+  if(set.has(key))set.delete(key);else set.add(key);
+  render(false,true);
+}
+function render(activityUpdate=false,preserveOrder=false) {
+  const q=$('search').value.trim().toLocaleLowerCase();
+  const hideUnknown=$('hide-unknown').checked,byApplication=$('group-app').checked;
+  const sorted=buildGroups(records,q,route,hideUnknown,byApplication).sort((a,b)=>compareGroups(a,b));
+  // Keep open details still while the counters update. Explicit sorting still works.
+  if(byApplication && (preserveOrder || activityUpdate===true && sorted.some(g=>expandedApps.has(g.key)))) {
+    const rank=new Map(rootOrder.map((key,index)=>[key,index]));
+    sorted.sort((a,b)=>(rank.get(a.key)??Infinity)-(rank.get(b.key)??Infinity));
+  }
+  rootOrder=sorted.map(g=>g.key);
+  const shown=flattenGroups(sorted.slice(0,350)), desired=new Set(shown.map(g=>g.key)), rows=$('rows');
+  const previous=new Map([...nodes].map(([key,el])=>[key,el.getBoundingClientRect().top]));
+  const entering=new Set(),bounds=rows.getBoundingClientRect();
+  for(const [key,el] of nodes)if(!desired.has(key)){el.remove();nodes.delete(key);}
+  let position=0;
+  for(const group of shown) {
+    const r=group.record;let el=nodes.get(group.key);
+    if(!el) {
+      const known=knownProcess(r);
+      el=node('div','row'+(known?'':' unknown'));el.setAttribute('role','row');
+      const app=node('div','application');
+      const info=node('div','app-info');
+      const expander=node('button','expander');expander.type='button';
+      info.append(expander,node('span','app-name',processLabel(r)));
+      app.append(info);
+      const target=node('div','target');
+      target.append(node('span','destination'),node('span','count'));
+      const badge=node('span','route'),pid=node('span','pid');
+      el.append(app,pid,node('span','protocol',r.protocol||'—'),target,node('span','traffic'),badge);nodes.set(group.key,el);
+      for(const cell of el.children)cell.setAttribute('role','cell');
+      el.addEventListener('click',()=>{if(el._toggleKey && !window.getSelection?.()?.toString())toggleGroup(el._toggleKey,el._depth);});
+      if(!reducedMotion && activityUpdate===true && group.depth===0 && (newTargets.has(group.key) || group.members?.some(g=>newTargets.has(g.key)))) {
+        entering.add(group.key);
+      }
+    }
+    el._depth=group.depth;el._toggleKey=group.members?group.key:null;
+    el.className='row'+(knownProcess(r)?'':' unknown')+(group.members?' expandable':'')+(group.depth===1?' process-row':group.depth===2?' connection-row':'');
+    el.querySelector('.application').style.paddingLeft=(group.depth*14)+'px';
+    el.querySelector('.app-name').textContent=group.depth===1?(r.pid?'PID '+r.pid:'PID —'):group.depth===2?sourceAddress(r)||processLabel(r):processLabel(r);
+    const expander=el.querySelector('.expander');
+    expander.hidden=!group.members;
+    if(group.members) {
+      const open=group.depth===0?expandedApps.has(group.key):!collapsedProcesses.has(group.key);
+      expander.setAttribute('aria-expanded',String(open));
+      expander.setAttribute('aria-label',(open?'Collapse ':'Expand ')+(group.depth===0?r.app:'PID '+(r.pid||'unavailable')));
+      expander.title=open?'Collapse':'Expand processes and connections';
+    }
+    const summary=r.summary;
+    el.querySelector('.application').title=summary?`${r.app}\nPIDs: ${summary.pids.join(', ')||'unavailable'}\n${summary.connections} connection groups · ${group.count} connection events`:[r.path?`${r.app} · PID ${r.pid}\n${r.path}`:r.owner_evidence,`${r.protocol} · ${r.inbound}`,sourceLabel(r)].filter(Boolean).join('\n');
+    const pid=el.querySelector('.pid');
+    pid.textContent=summary && summary.pids.length>1?`${summary.pids.length} PIDs`:pidLabel(r);
+    pid.title=summary?'Process IDs: '+(summary.pids.join(', ')||'unavailable'):r.pid?'Process ID from the original connection event':'Process ID unavailable for this event';
+    el.querySelector('.protocol').textContent=r.protocol||'—';
+    el.querySelector('.destination').textContent=summary?`${summary.destinations.length} destination${summary.destinations.length===1?'':'s'}`:r.destination.includes(':')?`[${r.destination}]:${r.port}`:`${r.destination}:${r.port}`;
+    const badge=el.querySelector('.route');
+    badge.className='route '+(Object.hasOwn(routeNames,r.outbound)?r.outbound:'');
+    badge.textContent=r.outbound==='mixed'?'Mixed':routeNames[r.outbound]||r.outbound;
+    badge.title=summary?'Xray routes: '+summary.routes.map(r=>routeNames[r]||r).join(', '):`${r.inbound} → ${r.outbound}\nXray routing decision`;
+    const totalBytes=r.traffic?r.traffic.sent+r.traffic.received:0;
+    el._newActivity=activityUpdate===true && el.dataset.lastActivity!==undefined && (Number(el.dataset.lastActivity)<r.time || totalBytes>Number(el.dataset.totalBytes));
+    el.dataset.lastActivity=String(r.time);
+    el.dataset.totalBytes=String(totalBytes);
+    const traffic=el.querySelector('.traffic');
+    const transferring=r.traffic && (r.traffic.up_rate>=1 || r.traffic.down_rate>=1);
+    traffic.className='traffic'+(transferring?'':' unavailable');
+    if(transferring) {
+      if(!traffic.children.length){traffic.textContent='';traffic.append(node('span','received'),node('span','sent'));}
+      traffic.querySelector('.received').textContent='↓ '+(r.traffic.down_rate>=1?formatBytes(r.traffic.down_rate)+'/s':'—');
+      traffic.querySelector('.sent').textContent='↑ '+(r.traffic.up_rate>=1?formatBytes(r.traffic.up_rate)+'/s':'—');
+    } else {
+      traffic.replaceChildren();traffic.textContent='—';
+    }
+    traffic.title=r.traffic?`Current speed; refreshes about once a second. Total received: ${formatBytes(r.traffic.received)} (${r.traffic.received.toLocaleString()} bytes). Total sent: ${formatBytes(r.traffic.sent)} (${r.traffic.sent.toLocaleString()} bytes). Counted since traffic was enabled.`:'No measured traffic is available for this connection.';
+    if(summary)traffic.title+=`\nMeasured ${summary.measured} of ${summary.connections} connection groups; unmeasured traffic is excluded.`;
+    el.querySelector('.target').title=(summary?summary.destinations.slice(0,30).join('\n')+(summary.destinations.length>30?`\n… and ${summary.destinations.length-30} more`:''):`${r.protocol} · ${r.destination}:${r.port}`)+`\nLast connection: ${new Date(r.time*1000).toLocaleTimeString('en-GB')}\nRecent sorts by this time, not by traffic volume.`;
+    const count=el.querySelector('.count');
+    count.textContent=!summary && group.count>1?'×'+group.count:'';
+    count.title=group.count+' connection events';
+    if(rows.children[position]!==el)rows.insertBefore(el,rows.children[position]||null);
+    position++;
+  }
+  if(!reducedMotion)for(const group of shown) {
+    const el=nodes.get(group.key),before=previous.get(group.key);
+    const after=el.getBoundingClientRect(),isNew=entering.has(group.key);
+    const isVisible=after.bottom>bounds.top && after.top<bounds.bottom;
+    const promoted=before!==undefined && before>after.top+.5 && el._newActivity;
+    if(activityUpdate===true && group.depth===0 && isVisible && (isNew || promoted)) {
+      el.animate([{transform:'translateY(-7px)',opacity:.25},{transform:'translateY(0)',opacity:1}],{duration:180,easing:'ease-out'});
+      if(knownProcess(group.record)) {
+        const name=el.querySelector('.app-name');
+        for(const running of name.getAnimations())running.cancel();
+        name.animate([{color:'#f2f3f6',offset:0},{color:'#f2f3f6',offset:.08},{color:'#969eac',offset:1}],{duration:1100,easing:'ease-out'});
+      }
+    }
+  }
+  $('empty').style.display=shown.length?'none':'block';
+  $('empty').textContent=q?'No matches. Try a different search.':hideUnknown?'No identified processes match the current filters.':route==='all'?'Waiting for new connections…':'No connections using this route yet.';
+  if(!shown.length)rows.append($('empty'));
+  const count=sorted.length>350?`Showing 350 of ${sorted.length}`:`${byApplication?'Groups':'Destinations'}: ${sorted.length}`;
+  $('total').textContent=count+' · '+(sortField==='time'?'latest connection first':'last 15 minutes');
+}
+
+async function poll() {
+  if(busy)return;busy=true;
+  try {
+    const data=await window.pywebview.api.snapshot();
+    records=data.records||[];trackArrivals(records);if(activeView==='connections')render(true);
+    const traffic=data.traffic||{},running=traffic.status==='running';
+    $('enable-traffic').hidden=running;
+    $('enable-traffic').disabled=traffic.status==='starting';
+    $('enable-traffic').textContent=traffic.status==='starting'?'Starting traffic…':'Enable traffic';
+    $('traffic-status').textContent=running?'Traffic since '+new Date(traffic.started*1000).toLocaleTimeString('en-GB')+(traffic.lost_events?' · incomplete':''):'';
+    $('traffic-status').title=traffic.lost_events?'Windows reported lost events; byte counts are incomplete.':'Observed Windows network bytes, counted since enabling traffic.';
+    $('enable-traffic').title=traffic.error||'Enable Windows traffic counters. Windows will ask for administrator permission.';
+    $('updated').textContent=data.error?'Log unavailable':data.updated;
+    $('updated').title=data.error?'Unable to read the Xray access log.':'';
+  } catch(e) {
+    $('updated').textContent='No data';
+  } finally {busy=false;}
+}
+
+$('search').addEventListener('input',render);
+$('group-app').addEventListener('change',()=>{
+  $('rows').scrollTop=0;render();
+  if(window.pywebview?.api)window.pywebview.api.set_group_by_app($('group-app').checked).catch(()=>{});
+});
+$('enable-traffic').addEventListener('click',async()=>{
+  $('enable-traffic').disabled=true;
+  try{await window.pywebview.api.enable_traffic();}finally{poll();}
+});
+for(const button of document.querySelectorAll('[data-sort]'))button.addEventListener('click',()=>setSort(button.dataset.sort));
+$('recent').addEventListener('click',()=>{sortField='time';sortDirection='desc';updateSortIndicators();render();saveSort();});
+$('hide-unknown').addEventListener('change',()=>{
+  $('rows').scrollTop=0;render();
+  if(window.pywebview?.api)window.pywebview.api.set_hide_unknown($('hide-unknown').checked).catch(()=>{});
+});
+for(const button of document.querySelectorAll('[data-route]'))button.addEventListener('click',()=>{
+  route=button.dataset.route;
+  document.querySelectorAll('[data-route]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
+  $('rows').scrollTop=0;render();
+});
+$('connections-tab').addEventListener('click',()=>switchView('connections'));
+$('template-tab').addEventListener('click',()=>switchView('template'));
+$('view-tabs').addEventListener('keydown',e=>{
+  if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)) {
+    e.preventDefault();const next=e.key==='Home'?'connections':e.key==='End'?'template':activeView==='template'?'connections':'template';
+    switchView(next);$(next+'-tab').focus();
+  }
+});
+$('format-template').addEventListener('click',()=>{if(templateEditor && !templateBusy){templateEditor.format();templateEditor.focus();}});
+$('expand-template').addEventListener('click',()=>{if(templateEditor && !templateBusy)templateEditor.expandAll();});
+$('save-template').addEventListener('click',saveTemplate);
+$('auto-reload').addEventListener('change',()=>{
+  templateStateWrite=templateStateWrite.catch(()=>{}).then(()=>window.pywebview.api.set_auto_reload($('auto-reload').checked));
+  templateStateWrite.catch(()=>templateStatus('Unable to save auto-reload preference',true));
+});
+$('reload-template').addEventListener('click',()=>{
+  if(!templateBusy && (!templateDirty || window.confirm('Discard your unsaved edits and load the latest template?')))loadTemplate();
+});
+document.addEventListener('keydown',e=>{
+  if(activeView==='template') {if(e.ctrlKey && e.key.toLowerCase()==='s'){e.preventDefault();saveTemplate();}return;}
+  if(e.ctrlKey&&e.key.toLowerCase()==='f'){e.preventDefault();$('search').focus();}
+  if(e.key==='Escape'){$('search').value='';render();}
+});
+window.addEventListener('pywebviewready',async()=>{
+  $('minimize').onclick=()=>window.pywebview.api.minimize();
+  $('maximize').onclick=()=>window.pywebview.api.maximize();
+  $('close').onclick=async()=>{if(!templateDirty || window.confirm('Discard unsaved template changes?')){await templateStateWrite.catch(()=>{});window.pywebview.api.close();}};
+  document.querySelector('.drag').ondblclick=()=>window.pywebview.api.maximize();
+  try {
+    const preferences=await window.pywebview.api.get_preferences();$('hide-unknown').checked=preferences.hide_unknown===true;
+    $('group-app').checked=preferences.group_by_app===true;
+    $('auto-reload').checked=preferences.auto_reload===true;
+    if(['app','protocol','route','time','traffic'].includes(preferences.sort_field))sortField=preferences.sort_field;
+    if(['asc','desc'].includes(preferences.sort_direction))sortDirection=preferences.sort_direction;
+  }catch(e){}
+  updateSortIndicators();
+  poll();setInterval(poll,1100);
+});
+</script>
+</body>
+</html>

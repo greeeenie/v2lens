@@ -1,0 +1,127 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {chromium} from 'playwright-core';
+import {formatJson} from './format.js';
+import {jsonBlocks,valueInsertion} from './structure.js';
+const root=path.dirname(fileURLToPath(import.meta.url));
+for(const text of ['{}','[]','{"a":[true,false,null,{},[]],"b":{"value":1.25e-2}}','{"escaped":"a\\\"b\\\\c","literal":"{[,]}"}']) {
+  const formatted=formatJson(text);
+  assert.deepEqual(JSON.parse(formatted),JSON.parse(text));
+  assert.equal(formatJson(formatted),formatted,'Formatting is idempotent');
+}
+const exact='{"integer":900719925474099312345,"exponent":1.2300e+20,"escape":"\\u0041"}';
+const precise=formatJson(exact);
+for(const literal of ['900719925474099312345','1.2300e+20','\\u0041'])assert.ok(precise.includes(literal),'Preserve the literal '+literal);
+assert.throws(()=>formatJson('{broken}'));
+const insert=(text,position)=>{
+  const edit=valueInsertion(text,position),result=text.slice(0,edit.from)+edit.insert+text.slice(edit.to);
+  JSON.parse(result);return result;
+};
+assert.deepEqual(JSON.parse(insert('{}',1)),{key:null});
+assert.deepEqual(JSON.parse(insert('[]',1)),[null]);
+assert.deepEqual(JSON.parse(insert('[1,2]',2)),[1,0,2]);
+assert.deepEqual(JSON.parse(insert('[1,2]',4)),[1,2,0]);
+assert.deepEqual(JSON.parse(insert('["first","last"]',8)),['first','','last']);
+assert.deepEqual(JSON.parse(insert('[true]',5)),[true,false]);
+assert.deepEqual(JSON.parse(insert('[{}]',3)),[{},{}]);
+assert.deepEqual(JSON.parse(insert('[[]]',3)),[[],[]]);
+assert.deepEqual(JSON.parse(insert('{"a":1,"b":2}',6)),{a:1,key:null,b:2});
+assert.deepEqual(JSON.parse(insert('{"key":1}',8)),{key:1,key2:null});
+const nested=formatJson('{"rules":[{"process":["Discord.exe"]}],"tail":true}');
+assert.deepEqual(JSON.parse(insert(nested,nested.indexOf('"Discord.exe"')+13)).rules[0].process,['Discord.exe','']);
+assert.deepEqual(JSON.parse(insert(nested,nested.indexOf('"rules": [')+10)).rules,[{},{process:['Discord.exe']}]);
+assert.ok(insert(exact,exact.length).includes('900719925474099312345'),'Insertion preserves raw number precision');
+assert.deepEqual(jsonBlocks(nested).map(block=>block.path),[[],['rules'],['rules',0],['rules',0,'process']]);
+assert.throws(()=>valueInsertion('{broken}',1));
+const source=fs.readFileSync(path.join(root,'../panel.html'),'utf8');
+const bundle=fs.readFileSync(path.join(root,'../json-editor.js'),'utf8');
+const html=source.replace('<!-- JSON_EDITOR_BUNDLE -->',()=>'<script>'+bundle.replace(/<\/script/gi,'<\\/script')+'</script>');
+const browser=await chromium.launch({channel:'msedge',headless:true});
+try {
+  const page=await browser.newPage({viewport:{width:980,height:720}});
+  const errors=[];page.on('pageerror',error=>errors.push(error.message));
+  const sample='{"routing":{"rules":[{"process":["Discord.exe"],"outboundTag":"proxy"}]},"enabled":true,"count":12}';
+  await page.evaluate(text=>{
+    window.testSaved=[];window.testFoldState={folds:[]};
+    window.pywebview={api:{set_auto_reload:async value=>{window.testAutoReload=value;return true;},get_editor_state:async()=>window.testFoldState,set_editor_state:async state=>{window.testFoldState=state;return true;},get_template:async()=>({ok:true,text,revision:'r1',enabled:true}),save_template:async(text,revision,auto_reload)=>{window.testSaved.push({text,revision,auto_reload});return{ok:true,revision:'r2',enabled:true,reloaded:auto_reload};}}};
+  },sample);
+  await page.setContent(html);
+  await page.getByRole('tab',{name:'Template',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('.cm-content')?.textContent.includes('Discord.exe'));
+  assert.equal(await page.getByRole('tab',{name:'Template',exact:true}).evaluate(el=>getComputedStyle(el).borderBottomWidth),'0px','Active tab has no underline');
+  assert.equal(await page.locator('#template-status').textContent(),'','Idle reload instruction is replaced by a checkbox');
+  await page.getByRole('button',{name:'Format',exact:true}).click();
+  const formatted=await page.evaluate(()=>getTemplateEditor().getValue());
+  assert.equal(formatted,formatJson(sample));
+  assert.deepEqual(JSON.parse(formatted),JSON.parse(sample));
+  await page.waitForFunction(()=>document.querySelectorAll('.cm-lineNumbers .cm-gutterElement').length>4);
+  const colors=await page.locator('.cm-content .cm-line span').evaluateAll(elements=>[...new Set(elements.map(e=>getComputedStyle(e).color))]);
+  assert.ok(colors.length>=3,'JSON keys, strings and values have distinct highlighting');
+  const lines=await page.locator('.cm-line').count();
+  assert.equal((await page.locator('.cm-foldGutter .cm-gutterElement').nth(1).textContent()).trim(),'⌄','Root object can be folded');
+  await page.locator('.cm-foldGutter .cm-gutterElement').filter({hasText:'⌄'}).first().click();
+  await page.locator('.cm-foldPlaceholder').waitFor();
+  assert.ok(await page.locator('.cm-line').count()<lines,'Folding hides block contents');
+  assert.ok(await page.locator('.cm-line').count()<=2,'Root object folds completely (with an optional final blank line)');
+  await page.waitForFunction(()=>JSON.stringify(window.testFoldState.folds)==='[[]]');
+  await page.locator('.cm-foldPlaceholder').click();
+  assert.equal(await page.locator('.cm-foldPlaceholder').count(),0,'Folded block expands again');
+  await page.locator('.cm-content').focus();
+  await page.keyboard.press('Control+z');
+  assert.equal(await page.evaluate(()=>getTemplateEditor().getValue()),sample,'Format can be undone in one step');
+  await page.keyboard.press('Control+Shift+F');
+  assert.equal(await page.evaluate(()=>getTemplateEditor().getValue()),formatted,'Format shortcut works');
+  await page.getByRole('checkbox',{name:'Auto-reload v2rayN'}).check();
+  await page.waitForFunction(()=>window.testAutoReload===true);
+  await page.keyboard.press('Control+s');
+  await page.waitForFunction(()=>window.testSaved.length===1);
+  assert.equal((await page.evaluate(()=>window.testSaved))[0].text,formatted,'Saved JSON is exactly what the editor displays');
+  assert.equal((await page.evaluate(()=>window.testSaved))[0].auto_reload,true,'Save passes the checked auto-reload option');
+  assert.match(await page.locator('#template-status').textContent(),/v2rayN reloaded/);
+  await page.locator('.cm-foldGutter .cm-gutterElement').filter({hasText:'⌄'}).nth(1).click();
+  await page.waitForFunction(()=>JSON.stringify(window.testFoldState.folds)==='[["routing"]]');
+  await page.evaluate(text=>getTemplateEditor().setValue(text,{folds:[['routing']]}),sample);
+  await page.getByRole('button',{name:'Format',exact:true}).click();
+  assert.equal(await page.locator('.cm-foldPlaceholder').count(),1,'Formatting preserves collapsed blocks');
+  assert.ok((await page.locator('.cm-content').textContent()).includes('enabled'),'Only the nested block stays folded');
+
+  // A new page has no in-memory editor state; load only the persisted paths.
+  const persisted=await page.evaluate(()=>templateStateWrite.then(()=>window.testFoldState));
+  const reopened=await browser.newPage({viewport:{width:980,height:720}});
+  await reopened.evaluate(({text,state})=>{
+    window.testFoldState=state;
+    window.pywebview={api:{get_template:async()=>({ok:true,text,revision:'r2',enabled:true}),get_editor_state:async()=>window.testFoldState,set_editor_state:async value=>{window.testFoldState=value;return true;}}};
+  },{text:formatted,state:persisted});
+  await reopened.setContent(html);
+  await reopened.getByRole('tab',{name:'Template',exact:true}).click();
+  await reopened.locator('.cm-foldPlaceholder').waitFor();
+  assert.ok((await reopened.locator('.cm-content').textContent()).includes('enabled'),'Collapsed paths restore after reopening');
+  await reopened.getByRole('button',{name:'Expand all',exact:true}).click();
+  assert.equal(await reopened.locator('.cm-foldPlaceholder').count(),0,'Expand all opens every block');
+  await reopened.waitForFunction(()=>window.testFoldState.folds.length===0);
+  await reopened.close();
+
+  await page.getByRole('button',{name:'Expand all',exact:true}).click();
+  await page.locator('.cm-line').filter({hasText:'"count": 12'}).click();
+  await page.getByRole('button',{name:'Add value after line',exact:true}).click();
+  assert.deepEqual(JSON.parse(await page.evaluate(()=>getTemplateEditor().getValue())),{...JSON.parse(sample),key:null},'Plus inserts an object property and commas');
+  assert.equal(await page.evaluate(()=>window.getSelection().toString()),'key','New property name is selected');
+  await page.keyboard.press('Control+z');
+  assert.equal(await page.evaluate(()=>getTemplateEditor().getValue()),formatted,'Adding a value is one undo step');
+  await page.locator('.cm-line').filter({hasText:'"Discord.exe"'}).click();
+  assert.equal(await page.locator('.cm-gutters .cm-addValue').count(),0,'Plus is outside the gutter');
+  assert.ok(await page.locator('.cm-content .cm-addValue').evaluate(button=>{
+    const range=document.createRange();range.selectNodeContents(button.parentElement);range.setEndBefore(button);
+    return button.getBoundingClientRect().left>=range.getBoundingClientRect().right;
+  }),'Plus follows the current line text');
+  await page.getByRole('button',{name:'Add value after line',exact:true}).click();
+  assert.deepEqual(JSON.parse(await page.evaluate(()=>getTemplateEditor().getValue())).routing.rules[0].process,['Discord.exe',''],'Plus infers a string array');
+  await page.keyboard.type('New.exe');
+  assert.deepEqual(JSON.parse(await page.evaluate(()=>getTemplateEditor().getValue())).routing.rules[0].process,['Discord.exe','New.exe'],'Caret starts between the inserted quotes');
+  fs.mkdirSync(path.join(root,'../build'),{recursive:true});
+  await page.screenshot({path:path.join(root,'../build/editor-preview.png')});
+  assert.deepEqual(errors,[],'No browser errors');
+  console.log('PASS: highlighting, persistent nested/root folds, Expand all, contextual value insertion, lossless formatting, undo, shortcuts and saving');
+} finally {await browser.close();}
