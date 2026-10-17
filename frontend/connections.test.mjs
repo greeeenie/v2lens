@@ -59,5 +59,26 @@ try {
   assert.equal(await page.locator('.row').count(),1);
   await page.setViewportSize({width:690,height:500});
   assert.ok(await page.locator('.row').evaluate(row=>row.scrollWidth<=row.clientWidth+1),'Columns fit the minimum window width');
+  assert.equal(await page.locator('.row').evaluateAll(rows=>rows.flatMap(row=>row.getAnimations()).length),0,'Reduced motion disables row animation');
+  const motion=await browser.newPage({viewport:{width:980,height:720},reducedMotion:'no-preference'});
+  await motion.setContent(html);
+  const moves=await motion.evaluate(input=>{
+    records=[{...input[0],app:'First.exe',time:2},{...input[1],app:'Second.exe',time:1}];
+    sortField='time';sortDirection='desc';render();
+    records[1].time=3;render(true);
+    return [...document.querySelectorAll('.row')].map(row=>row.getAnimations().map(animation=>({duration:animation.effect.getTiming().duration,frames:animation.effect.getKeyframes()})));
+  },context.input);
+  assert.ok(moves.every(animations=>animations.length===1&&animations[0].duration===150),'Both displaced rows animate for 150 ms');
+  assert.ok(moves[0][0].frames[0].transform.startsWith('translateY(44'),'Promoted row starts at its previous lower position');
+  assert.ok(moves[1][0].frames[0].transform.startsWith('translateY(-44'),'Displaced row starts at its previous higher position');
+  assert.ok(moves.every(([animation])=>!Object.hasOwn(animation.frames[0],'opacity')),'Reordering moves existing rows without fading them');
+  const interrupted=await motion.evaluate(()=>{
+    records[0].time=4;render(true);
+    return [...document.querySelectorAll('.row')].map(row=>row.getAnimations().length);
+  });
+  assert.ok(interrupted.every(count=>count<=1),'A new update replaces the previous movement instead of stacking animations');
+  await motion.waitForTimeout(200);
+  assert.equal(await motion.locator('.row').evaluateAll(rows=>rows.flatMap(row=>row.getAnimations()).length),0,'Movement finishes cleanly');
+  await motion.close();
 } finally {await browser.close();}
 console.log('PASS: flat application details, visible PIDs, separate/sortable gateways and traffic deduplication');

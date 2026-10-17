@@ -432,6 +432,7 @@ function render(activityUpdate=false,preserveOrder=false) {
   rootOrder=sorted.map(g=>g.key);
   const shown=flattenGroups(sorted.slice(0,350)), desired=new Set(shown.map(g=>g.key)), rows=$('rows');
   const previous=new Map([...nodes].map(([key,el])=>[key,el.getBoundingClientRect().top]));
+  for(const el of nodes.values())for(const animation of el.getAnimations())animation.cancel();
   const entering=new Set(),bounds=rows.getBoundingClientRect();
   for(const [key,el] of nodes)if(!desired.has(key)){el.remove();nodes.delete(key);}
   let position=0;
@@ -509,8 +510,12 @@ function render(activityUpdate=false,preserveOrder=false) {
     const after=el.getBoundingClientRect(),isNew=entering.has(group.key);
     const isVisible=after.bottom>bounds.top && after.top<bounds.bottom;
     const promoted=before!==undefined && before>after.top+.5 && el._newActivity;
+    if(before!==undefined && isVisible && Math.abs(before-after.top)>.5) {
+      el.animate([{transform:`translateY(${before-after.top}px)`},{transform:'translateY(0)'}],{duration:150,easing:'cubic-bezier(.2,0,.2,1)'});
+    } else if(activityUpdate===true && group.depth===0 && isVisible && isNew) {
+      el.animate([{transform:'translateY(-7px)',opacity:.25},{transform:'translateY(0)',opacity:1}],{duration:150,easing:'ease-out'});
+    }
     if(activityUpdate===true && group.depth===0 && isVisible && (isNew || promoted)) {
-      el.animate([{transform:'translateY(-7px)',opacity:.25},{transform:'translateY(0)',opacity:1}],{duration:180,easing:'ease-out'});
       if(knownProcess(group.record)) {
         const name=el.querySelector('.app-name');
         for(const running of name.getAnimations())running.cancel();
